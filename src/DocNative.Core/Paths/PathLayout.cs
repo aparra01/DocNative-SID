@@ -134,8 +134,34 @@ public sealed class PathLayout : IPathLayout
             }
         }
 
+        var entradaRoot = Normalize(_options.OutputRoot);
         var salidaRoot = Normalize(_options.SalidaRoot);
         var errorRoot = EffectiveErrorRoot;
+
+        if (Directory.Exists(entradaRoot))
+        {
+            foreach (var agencyDir in Directory.EnumerateDirectories(entradaRoot))
+            {
+                if (string.Equals(
+                        Path.GetFileName(agencyDir),
+                        DocNativeOptions.ListoSubfolderName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var listoDir = Path.Combine(agencyDir, DocNativeOptions.ListoSubfolderName);
+                if (!Directory.Exists(listoDir))
+                {
+                    continue;
+                }
+
+                foreach (var path in Directory.EnumerateFiles(listoDir, fileName, SearchOption.TopDirectoryOnly))
+                {
+                    ConsiderMatch(path);
+                }
+            }
+        }
 
         if (Directory.Exists(errorRoot))
         {

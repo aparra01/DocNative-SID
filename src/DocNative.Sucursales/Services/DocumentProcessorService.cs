@@ -40,49 +40,86 @@ public sealed class DocumentProcessorService
 
     public async Task ProcessAsync(string pdfPath, CancellationToken cancellationToken)
     {
+        if (pdfPath.EndsWith(".processing", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (_pathLayout.IsListoDeliveryPath(pdfPath))
+        {
+            _logger.LogDebug("PDF en LISTO ignorado por DocNative | Ruta={Ruta}", pdfPath);
+            return;
+        }
+
+        if (!_sucursalResolver.TryResolve(pdfPath, out var agencia))
+        {
+            if (File.Exists(pdfPath))
+            {
+                await _errorHandler.HandleAsync(pdfPath, _options.SinSucursalCode, "Ruta fuera de carpetas de staging", cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        var fileName = Path.GetFileName(pdfPath);
+        var workingPath = _pathLayout.GetProcesandoPath(agencia, fileName);
+        var listoPath = _pathLayout.GetListoPath(agencia, fileName);
+
         lock (_lock)
         {
-            if (!_inProgress.Add(pdfPath))
+            if (!_inProgress.Add(workingPath))
             {
+                _logger.LogDebug(
+                    "PDF ya en procesamiento | Agencia={Agencia} | Archivo={Archivo} | Clave={Clave}",
+                    agencia,
+                    fileName,
+                    workingPath);
                 return;
             }
         }
 
         try
         {
+            if (File.Exists(listoPath))
+            {
+                _logger.LogInformation(
+                    "PDF ya entregado en LISTO, omitiendo | Agencia={Agencia} | Archivo={Archivo} | Destino={Destino}",
+                    agencia,
+                    fileName,
+                    listoPath);
+                return;
+            }
+
             if (!File.Exists(pdfPath))
             {
-                _logger.LogDebug("PDF no encontrado al iniciar procesamiento | Ruta={Ruta}", pdfPath);
-                return;
-            }
-
-            if (pdfPath.EndsWith(".processing", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            if (_pathLayout.IsListoDeliveryPath(pdfPath))
-            {
-                _logger.LogDebug("PDF en LISTO ignorado por DocNative | Ruta={Ruta}", pdfPath);
-                return;
-            }
-
-            if (!_sucursalResolver.TryResolve(pdfPath, out var agencia))
-            {
-                await _errorHandler.HandleAsync(pdfPath, _options.SinSucursalCode, "Ruta fuera de carpetas de staging", cancellationToken).ConfigureAwait(false);
-                return;
+                if (File.Exists(workingPath))
+                {
+                    pdfPath = workingPath;
+                }
+                else if (_pathLayout.TryLocateRelocatedPdf(fileName, 30, out var locatedPath))
+                {
+                    _logger.LogInformation(
+                        "PDF ya procesado por otro proceso | Agencia={Agencia} | Archivo={Archivo} | Ubicacion={Ubicacion}",
+                        agencia,
+                        fileName,
+                        locatedPath);
+                    return;
+                }
+                else
+                {
+                    _logger.LogDebug("PDF no encontrado al iniciar procesamiento | Ruta={Ruta}", pdfPath);
+                    return;
+                }
             }
 
             var normalizedPath = _pathLayout.Normalize(pdfPath);
             var workRoot = _pathLayout.GetWorkRoot();
             var alreadyInWork = normalizedPath.StartsWith(workRoot, StringComparison.OrdinalIgnoreCase);
 
-            string workingPath;
             string correlationId;
 
             if (alreadyInWork)
             {
-                workingPath = pdfPath;
                 try
                 {
                     correlationId = FileHashHelper.ComputeSha256Hex(workingPath);
@@ -106,7 +143,6 @@ public sealed class DocumentProcessorService
                     return;
                 }
 
-                var fileName = Path.GetFileName(pdfPath);
                 try
                 {
                     correlationId = FileHashHelper.ComputeSha256Hex(pdfPath);
@@ -117,7 +153,6 @@ public sealed class DocumentProcessorService
                     correlationId = "desconocido";
                 }
 
-                workingPath = _pathLayout.GetProcesandoPath(agencia, fileName);
                 Directory.CreateDirectory(Path.GetDirectoryName(workingPath)!);
 
                 try
@@ -168,7 +203,7 @@ public sealed class DocumentProcessorService
             if (result.ErrorKind == PipelineErrorKind.RelocatedByOtherProcess)
             {
                 _logger.LogInformation(
-                    "Archivo ya movido por PyVision | CorrelationId={CorrelationId} | Ubicacion={Ubicacion}",
+                    "Archivo ya procesado por otro proceso | CorrelationId={CorrelationId} | Ubicacion={Ubicacion}",
                     correlationId,
                     result.RelocatedPath);
                 CleanupTempFile(tempOutputPath);
@@ -182,7 +217,6 @@ public sealed class DocumentProcessorService
                 return;
             }
 
-            var listoPath = _pathLayout.GetListoPath(agencia, outputFileName);
             Directory.CreateDirectory(Path.GetDirectoryName(listoPath)!);
 
             if (File.Exists(listoPath))
@@ -206,7 +240,7 @@ public sealed class DocumentProcessorService
         {
             lock (_lock)
             {
-                _inProgress.Remove(pdfPath);
+                _inProgress.Remove(workingPath);
             }
         }
     }

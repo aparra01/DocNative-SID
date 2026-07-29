@@ -113,6 +113,38 @@ public class PathLayoutTests
         Assert.EndsWith(Path.Combine("28_07_2026", "errores_28_07_2026.csv"), path.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void TryLocateRelocatedPdf_FindsPdfInListoFolder()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "docnative-test-" + Guid.NewGuid().ToString("N"));
+        var entradaRoot = Path.Combine(tempRoot, "entrada");
+        var listoDir = Path.Combine(entradaRoot, "QUITO", DocNativeOptions.ListoSubfolderName);
+        Directory.CreateDirectory(listoDir);
+
+        var pdfPath = Path.Combine(listoDir, "lote.pdf");
+        File.WriteAllText(pdfPath, "pdf");
+
+        try
+        {
+            var layout = new PathLayout(Options.Create(new DocNativeOptions
+            {
+                OutputRoot = entradaRoot,
+                WorkRoot = Path.Combine(tempRoot, "work"),
+                SalidaRoot = Path.Combine(tempRoot, "salida"),
+                ErrorRoot = string.Empty
+            }));
+
+            var found = layout.TryLocateRelocatedPdf("lote.pdf", 30, out var locatedPath);
+
+            Assert.True(found);
+            Assert.Equal(pdfPath, locatedPath);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static PathLayout CreateLayout()
     {
         var options = Options.Create(new DocNativeOptions

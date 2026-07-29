@@ -38,9 +38,11 @@ public sealed class ErrorHandler : IErrorHandler
             destinationPath = Path.Combine(destinationDirectory, $"{baseName}_{stamp}{extension}");
         }
 
+        var moved = false;
         if (File.Exists(sourcePdfPath))
         {
             File.Move(sourcePdfPath, destinationPath, overwrite: false);
+            moved = true;
         }
 
         var destinationFileName = Path.GetFileName(destinationPath);
@@ -57,11 +59,23 @@ public sealed class ErrorHandler : IErrorHandler
 
         await _errorRecordStore.AppendErrorAsync(record, cancellationToken).ConfigureAwait(false);
 
-        _logger.LogWarning(
-            "PDF movido a error. Agencia={Agencia}, Archivo={Archivo}, TipoError={TipoError}, Destino={Destino}",
-            agencia,
-            destinationFileName,
-            tipoError,
-            destinationPath);
+        if (moved)
+        {
+            _logger.LogWarning(
+                "PDF movido a error. Agencia={Agencia}, Archivo={Archivo}, TipoError={TipoError}, Destino={Destino}",
+                agencia,
+                destinationFileName,
+                tipoError,
+                destinationPath);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Error registrado sin archivo fuente. Agencia={Agencia}, Archivo={Archivo}, TipoError={TipoError}, Fuente={Fuente}",
+                agencia,
+                destinationFileName,
+                tipoError,
+                sourcePdfPath);
+        }
     }
 }
