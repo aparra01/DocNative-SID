@@ -45,11 +45,12 @@ builder.Services.AddQuartzHostedService(options =>
 
 var host = builder.Build();
 
+var pathLayout = host.Services.GetRequiredService<DocNative.Core.Abstractions.IPathLayout>();
 Log.Information(
-    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, PROCESANDO={ProcesandoRoot}, PRE_PROCESADO={PreProcesadoRoot}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}",
+    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}",
     docNativeOptions.OutputRoot,
-    docNativeOptions.ProcesandoRoot,
-    docNativeOptions.PreProcesadoRoot,
+    pathLayout.GetWorkRoot(),
+    DocNativeOptions.ListoSubfolderName,
     docNativeOptions.SalidaRoot,
     string.IsNullOrWhiteSpace(docNativeOptions.ErrorRoot)
         ? Path.Combine(docNativeOptions.SalidaRoot, "ERROR")

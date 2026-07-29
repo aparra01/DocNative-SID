@@ -1,6 +1,6 @@
 # DocNative-SID
 
-Servicio nativo .NET 8 de **pre-procesamiento de PDFs** para el flujo PagareOCR de sucursales. Corre **antes** de PyVision: limpia hojas en blanco, corrige orientación a portrait **in-place** en `ENTRADA/<codigo>/`.
+Servicio nativo .NET 8 de **pre-procesamiento de PDFs** para el flujo PagareOCR de sucursales. Corre **antes** de PyVision: limpia hojas en blanco, corrige orientación a portrait y entrega en `ENTRADA/<codigo>/LISTO/`.
 
 ## Proyectos
 
@@ -13,13 +13,21 @@ Servicio nativo .NET 8 de **pre-procesamiento de PDFs** para el flujo PagareOCR 
 ## Flujo de datos
 
 ```
-MFP / UNC  →  ENTRADA/<codigo>/  →  DocNative (in-place)  →  PyVision
-                     │                      │
-                     │                      └── SALIDA/ERROR/DD_MM_YYYY/ + CSV diario
+MFP / UNC  →  ENTRADA/<codigo>/  →  DocNative  →  ENTRADA/<codigo>/LISTO/  →  PyVision  →  SALIDA/<codigo>/PROCESADOS/
+                     │                    │                                              │
+                     │                    └── work temp (%LOCALAPPDATA%/DocNative/work)     └── SALIDA/ERROR/ + CSV diario
 ```
 
-- **ENTRADA:** escaneo directo desde multifuncional (montaje SMB) y misma ruta que vigila PyVision.
-- **SALIDA/ERROR:** errores centralizados de todas las sucursales (compartido con PyVision).
+**Carpetas visibles para el operador:**
+
+| Carpeta | Uso |
+|---------|-----|
+| `ENTRADA/<codigo>/` | Escaneo MFP (intake) |
+| `ENTRADA/<codigo>/LISTO/` | Handoff post DocNative (PyVision solo procesa aquí) |
+| `SALIDA/<codigo>/PROCESADOS/` | Resultado OCR |
+| `SALIDA/ERROR/` | Errores centralizados (compartido con PyVision) |
+
+El trabajo interno de DocNative usa `%LOCALAPPDATA%/DocNative/work/<codigo>/` (no requiere montaje SMB).
 
 ## Requisitos
 
@@ -33,7 +41,8 @@ MFP / UNC  →  ENTRADA/<codigo>/  →  DocNative (in-place)  →  PyVision
 
 | Clave | Default contenedor | Descripción |
 |-------|-------------------|-------------|
-| `OutputRoot` | `C:/mnt/PagareOcrEntrada` | Carpeta vigilada: ENTRADA (subcarpetas = código sucursal) |
+| `OutputRoot` | `C:/mnt/PagareOcrEntrada` | ENTRADA (subcarpetas = código sucursal) |
+| `WorkRoot` | *(vacío → `%LOCALAPPDATA%/DocNative/work`)* | Claim temporal interno |
 | `SalidaRoot` | `C:/mnt/PagareOcrSalida` | Raíz SALIDA de PyVision |
 | `ErrorRoot` | *(vacío → `{SalidaRoot}/ERROR`)* | Errores centralizados + CSV |
 | `BlankPageThreshold` | `0.02` | Umbral stddev normalizado (0–1) para hoja en blanco |
@@ -47,6 +56,13 @@ MFP / UNC  →  ENTRADA/<codigo>/  →  DocNative (in-place)  →  PyVision
 PYVISION_HOST_PAGAREOCR_ENTRADA=D:/SID/COOPROGRESO/PAGAREOCR/ENTRADA
 PYVISION_HOST_PAGAREOCR_SALIDA=D:/SID/COOPROGRESO/PAGAREOCR/SALIDA
 DOCNATIVE_CSV_REPORT_TIME=23:50
+```
+
+### Migración BD (PyVision)
+
+```bash
+cd PyVision-SID
+python scripts/migrar_pagare_ocr_listo.py --ruta-base C:/SID/COOPROGRESO/PAGAREOCR
 ```
 
 ## Desarrollo local
@@ -108,7 +124,7 @@ CSV (generado a las 23:50, hora local):
 
 ## Montaje SMB (producción)
 
-Monte el UNC del servidor impresión directamente en **`ENTRADA/<codigo>/`**. DocNative y PyVision comparten la misma carpeta.
+Monte el UNC del servidor impresión directamente en **`ENTRADA/<codigo>/`**. PyVision vigila la misma raíz ENTRADA pero solo procesa PDFs en `LISTO/`.
 
 ## Stack técnico
 
@@ -128,7 +144,7 @@ Si OpenCV no alcanza precisión en documentos reales del banco, `IBlankPageDetec
 |---------|----------------|--------|
 | Contenedor no arranca | Imagen nanoserver | Usar `servercore-ltsc2022` |
 | `DllNotFoundException` OpenCV | Falta VC++ redist | Dockerfile instala VC++ 2015–2022 x64 |
-| PyVision lee PDF sin procesar | DocNative no corre o archivo `.processing` bloqueado | Verificar servicio docnative y logs |
+| PyVision lee PDF sin procesar | PDF aún en ENTRADA (no en LISTO) o DocNative detenido | Verificar DocNative; PDF debe pasar a `LISTO/` |
 | CSV vacío | Sin errores ese día | Normal; revisar `_registry.jsonl` |
 
 ## Integración SID

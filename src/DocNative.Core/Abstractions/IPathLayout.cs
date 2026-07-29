@@ -4,6 +4,8 @@ public interface IPathLayout
 {
     string Normalize(string path);
 
+    string GetWorkRoot();
+
     string GetAgencyOutputDirectory(string agencia);
 
     string GetAgencyErrorDirectory(DateOnly date, string agencia);
@@ -22,7 +24,14 @@ public interface IPathLayout
 
     string GetProcesandoPath(string agencia, string fileName);
 
+    string GetListoPath(string agencia, string fileName);
+
+    [Obsolete("Use GetListoPath.")]
     string GetPreProcesadoPath(string agencia, string fileName);
+
+    bool IsListoDeliveryPath(string pdfPath);
+
+    bool IsIntakeEntradaPath(string pdfPath);
 
     bool TryLocateRelocatedPdf(string fileName, int maxAgeMinutes, out string locatedPath);
 }

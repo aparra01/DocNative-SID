@@ -61,6 +61,12 @@ public sealed class DocumentProcessorService
                 return;
             }
 
+            if (_pathLayout.IsListoDeliveryPath(pdfPath))
+            {
+                _logger.LogDebug("PDF en LISTO ignorado por DocNative | Ruta={Ruta}", pdfPath);
+                return;
+            }
+
             if (!_sucursalResolver.TryResolve(pdfPath, out var agencia))
             {
                 await _errorHandler.HandleAsync(pdfPath, _options.SinSucursalCode, "Ruta fuera de carpetas de staging", cancellationToken).ConfigureAwait(false);
@@ -68,13 +74,13 @@ public sealed class DocumentProcessorService
             }
 
             var normalizedPath = _pathLayout.Normalize(pdfPath);
-            var procesandoRoot = _pathLayout.Normalize(_options.ProcesandoRoot);
-            var alreadyInProcesando = normalizedPath.StartsWith(procesandoRoot, StringComparison.OrdinalIgnoreCase);
+            var workRoot = _pathLayout.GetWorkRoot();
+            var alreadyInWork = normalizedPath.StartsWith(workRoot, StringComparison.OrdinalIgnoreCase);
 
             string workingPath;
             string correlationId;
 
-            if (alreadyInProcesando)
+            if (alreadyInWork)
             {
                 workingPath = pdfPath;
                 try
@@ -88,7 +94,7 @@ public sealed class DocumentProcessorService
                 }
 
                 _logger.LogInformation(
-                    "Reanudando PDF en PROCESANDO | CorrelationId={CorrelationId} | Ruta={Ruta}",
+                    "Reanudando PDF en WORK | CorrelationId={CorrelationId} | Ruta={Ruta}",
                     correlationId,
                     workingPath);
             }
@@ -137,7 +143,7 @@ public sealed class DocumentProcessorService
                 }
 
                 _logger.LogInformation(
-                    "PDF reclamado en PROCESANDO | CorrelationId={CorrelationId} | Agencia={Agencia} | Archivo={Archivo} | Destino={Destino}",
+                    "PDF reclamado en WORK | CorrelationId={CorrelationId} | Agencia={Agencia} | Archivo={Archivo} | Destino={Destino}",
                     correlationId,
                     agencia,
                     fileName,
@@ -176,25 +182,25 @@ public sealed class DocumentProcessorService
                 return;
             }
 
-            var preProcesadoPath = _pathLayout.GetPreProcesadoPath(agencia, outputFileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(preProcesadoPath)!);
+            var listoPath = _pathLayout.GetListoPath(agencia, outputFileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(listoPath)!);
 
-            if (File.Exists(preProcesadoPath))
+            if (File.Exists(listoPath))
             {
-                File.Delete(preProcesadoPath);
+                File.Delete(listoPath);
             }
 
-            File.Move(result.OutputPath, preProcesadoPath, overwrite: true);
+            File.Move(result.OutputPath, listoPath, overwrite: true);
             CleanupSourceFile(workingPath);
 
             _logger.LogInformation(
-                "PDF entregado a PRE_PROCESADO | CorrelationId={CorrelationId} | Agencia={Agencia} | Archivo={Archivo} | Eliminadas={Removed} | Rotadas={Rotated} | Destino={Destino}",
+                "PDF entregado a LISTO | CorrelationId={CorrelationId} | Agencia={Agencia} | Archivo={Archivo} | Eliminadas={Removed} | Rotadas={Rotated} | Destino={Destino}",
                 correlationId,
                 agencia,
                 outputFileName,
                 result.PagesRemoved,
                 result.PagesRotated,
-                preProcesadoPath);
+                listoPath);
         }
         finally
         {

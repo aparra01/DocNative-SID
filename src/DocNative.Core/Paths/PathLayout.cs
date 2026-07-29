@@ -16,6 +16,26 @@ public sealed class PathLayout : IPathLayout
     public string Normalize(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+    public string GetWorkRoot()
+    {
+        if (!string.IsNullOrWhiteSpace(_options.WorkRoot))
+        {
+            return Normalize(_options.WorkRoot);
+        }
+
+#pragma warning disable CS0618
+        if (!string.IsNullOrWhiteSpace(_options.ProcesandoRoot))
+        {
+            return Normalize(_options.ProcesandoRoot);
+        }
+#pragma warning restore CS0618
+
+        return Normalize(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DocNative",
+            "work"));
+    }
+
     public string GetAgencyOutputDirectory(string agencia) =>
         Path.Combine(Normalize(_options.OutputRoot), SanitizeAgency(agencia));
 
@@ -32,10 +52,39 @@ public sealed class PathLayout : IPathLayout
         Path.Combine(GetDateErrorDirectory(date), $"errores_{FormatDateFolder(date)}.csv");
 
     public string GetProcesandoPath(string agencia, string fileName) =>
-        Path.Combine(Normalize(_options.ProcesandoRoot), SanitizeAgency(agencia), fileName);
+        Path.Combine(GetWorkRoot(), SanitizeAgency(agencia), fileName);
 
-    public string GetPreProcesadoPath(string agencia, string fileName) =>
-        Path.Combine(Normalize(_options.PreProcesadoRoot), SanitizeAgency(agencia), fileName);
+    public string GetListoPath(string agencia, string fileName) =>
+        Path.Combine(GetAgencyOutputDirectory(agencia), DocNativeOptions.ListoSubfolderName, fileName);
+
+    public string GetPreProcesadoPath(string agencia, string fileName) => GetListoPath(agencia, fileName);
+
+    public bool IsListoDeliveryPath(string pdfPath)
+    {
+        var directory = Normalize(Path.GetDirectoryName(pdfPath) ?? string.Empty);
+        var listoSegment = $"{Path.DirectorySeparatorChar}{DocNativeOptions.ListoSubfolderName}";
+        var listoSegmentAlt = $"{Path.AltDirectorySeparatorChar}{DocNativeOptions.ListoSubfolderName}";
+        return directory.EndsWith(listoSegment, StringComparison.OrdinalIgnoreCase)
+            || directory.EndsWith(listoSegmentAlt, StringComparison.OrdinalIgnoreCase)
+            || directory.Contains(
+                $"{listoSegment}{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+            || directory.Contains(
+                $"{listoSegmentAlt}{Path.AltDirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool IsIntakeEntradaPath(string pdfPath)
+    {
+        var fullPdfPath = Normalize(pdfPath);
+        var entradaRoot = Normalize(_options.OutputRoot);
+        if (!fullPdfPath.StartsWith(entradaRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !IsListoDeliveryPath(pdfPath);
+    }
 
     public bool TryResolveAgencyFromEntradaPath(string pdfPath, out string agencia) =>
         TryResolveAgencyFromRoot(pdfPath, Normalize(_options.OutputRoot), out agencia);
@@ -50,12 +99,7 @@ public sealed class PathLayout : IPathLayout
             return true;
         }
 
-        if (TryResolveAgencyFromRoot(pdfPath, Normalize(_options.ProcesandoRoot), out agencia))
-        {
-            return true;
-        }
-
-        return TryResolveAgencyFromRoot(pdfPath, Normalize(_options.PreProcesadoRoot), out agencia);
+        return TryResolveAgencyFromRoot(pdfPath, GetWorkRoot(), out agencia);
     }
 
     public bool TryLocateRelocatedPdf(string fileName, int maxAgeMinutes, out string locatedPath)
@@ -147,7 +191,14 @@ public sealed class PathLayout : IPathLayout
             return true;
         }
 
-        var firstSegment = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+        var segments = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var firstSegment = segments[0];
+        if (string.Equals(firstSegment, DocNativeOptions.ListoSubfolderName, StringComparison.OrdinalIgnoreCase)
+            && segments.Length > 1)
+        {
+            firstSegment = segments[1];
+        }
+
         if (string.IsNullOrWhiteSpace(firstSegment))
         {
             agencia = _options.SinSucursalCode;

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
+using DocNative.Core.Abstractions;
 using DocNative.Core.Configuration;
-using DocNative.Core.Paths;
 using Microsoft.Extensions.Options;
 
 namespace DocNative.Sucursales.Watching;
@@ -8,6 +8,7 @@ namespace DocNative.Sucursales.Watching;
 public sealed class HotfolderWatcher : IDisposable
 {
     private readonly DocNativeOptions _options;
+    private readonly IPathLayout _pathLayout;
     private readonly ILogger<HotfolderWatcher> _logger;
     private readonly ConcurrentDictionary<string, byte> _pending = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lifecycleLock = new();
@@ -19,9 +20,13 @@ public sealed class HotfolderWatcher : IDisposable
 
     public event Func<string, Task>? PdfDetected;
 
-    public HotfolderWatcher(IOptions<DocNativeOptions> options, ILogger<HotfolderWatcher> logger)
+    public HotfolderWatcher(
+        IOptions<DocNativeOptions> options,
+        IPathLayout pathLayout,
+        ILogger<HotfolderWatcher> logger)
     {
         _options = options.Value;
+        _pathLayout = pathLayout;
         _logger = logger;
     }
 
@@ -38,8 +43,7 @@ public sealed class HotfolderWatcher : IDisposable
         }
 
         Directory.CreateDirectory(_options.OutputRoot);
-        Directory.CreateDirectory(_options.ProcesandoRoot);
-        Directory.CreateDirectory(_options.PreProcesadoRoot);
+        Directory.CreateDirectory(_pathLayout.GetWorkRoot());
 
         _watcher = new FileSystemWatcher(_options.OutputRoot)
         {
@@ -57,9 +61,9 @@ public sealed class HotfolderWatcher : IDisposable
         _pollTask = Task.Run(() => PollExistingFilesAsync(_pollCts.Token));
 
         _logger.LogInformation(
-            "Hotfolder activo en ENTRADA {OutputRoot} (backlog PROCESANDO en {ProcesandoRoot})",
+            "Hotfolder activo en ENTRADA {OutputRoot} (backlog WORK en {WorkRoot})",
             _options.OutputRoot,
-            _options.ProcesandoRoot);
+            _pathLayout.GetWorkRoot());
     }
 
     private void OnChanged(object sender, FileSystemEventArgs e) => EnqueueIfPdf(e.FullPath);
@@ -74,6 +78,16 @@ public sealed class HotfolderWatcher : IDisposable
         }
 
         if (path.EndsWith(".processing", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (_pathLayout.IsListoDeliveryPath(path))
+        {
+            return;
+        }
+
+        if (!_pathLayout.IsIntakeEntradaPath(path) && !_pathLayout.Normalize(path).StartsWith(_pathLayout.GetWorkRoot(), StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -110,8 +124,8 @@ public sealed class HotfolderWatcher : IDisposable
         {
             try
             {
-                PollRoot(_options.OutputRoot);
-                PollRoot(_options.ProcesandoRoot);
+                PollEntradaIntake(_options.OutputRoot);
+                PollRoot(_pathLayout.GetWorkRoot());
             }
             catch (Exception ex)
             {
@@ -119,6 +133,35 @@ public sealed class HotfolderWatcher : IDisposable
             }
 
             await Task.Delay(_options.PollingIntervalMs, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private void PollEntradaIntake(string root)
+    {
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        foreach (var agencyDir in Directory.EnumerateDirectories(root))
+        {
+            if (string.Equals(
+                    Path.GetFileName(agencyDir),
+                    DocNativeOptions.ListoSubfolderName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(agencyDir, "*.pdf", SearchOption.TopDirectoryOnly))
+            {
+                EnqueueIfPdf(file);
+            }
+        }
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.pdf", SearchOption.TopDirectoryOnly))
+        {
+            EnqueueIfPdf(file);
         }
     }
 

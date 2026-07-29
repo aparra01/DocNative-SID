@@ -18,12 +18,12 @@ public class PathLayoutTests
     }
 
     [Fact]
-    public void ResolveAgencyFromStagingPath_WorksForProcesandoRoot()
+    public void ResolveAgencyFromStagingPath_WorksForWorkRoot()
     {
         var layout = CreateLayout();
 
         var resolved = layout.TryResolveAgencyFromStagingPath(
-            @"C:\data\procesando\GYE001\lote.pdf",
+            @"C:\Users\test\AppData\Local\DocNative\work\GYE001\lote.pdf",
             out var agencia);
 
         Assert.True(resolved);
@@ -31,23 +31,44 @@ public class PathLayoutTests
     }
 
     [Fact]
-    public void GetProcesandoPath_UsesAgencySubfolder()
+    public void GetProcesandoPath_UsesWorkRootAndAgencySubfolder()
     {
         var layout = CreateLayout();
 
         var path = layout.GetProcesandoPath("quito", "lote.pdf");
 
-        Assert.EndsWith(Path.Combine("procesando", "QUITO", "lote.pdf"), path.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Combine("work", "QUITO", "lote.pdf"), path.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void GetPreProcesadoPath_UsesAgencySubfolder()
+    public void GetListoPath_UsesEntradaAgencyListoSubfolder()
     {
         var layout = CreateLayout();
 
-        var path = layout.GetPreProcesadoPath("gye001", "lote.pdf");
+        var path = layout.GetListoPath("gye001", "lote.pdf");
 
-        Assert.EndsWith(Path.Combine("preprocesado", "GYE001", "lote.pdf"), path.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(
+            Path.Combine("entrada", "GYE001", DocNativeOptions.ListoSubfolderName, "lote.pdf"),
+            path.Replace('/', '\\'),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IsListoDeliveryPath_DetectsListoSubfolder()
+    {
+        var layout = CreateLayout();
+
+        Assert.True(layout.IsListoDeliveryPath(@"C:\data\entrada\GYE001\LISTO\lote.pdf"));
+        Assert.False(layout.IsListoDeliveryPath(@"C:\data\entrada\GYE001\lote.pdf"));
+    }
+
+    [Fact]
+    public void IsIntakeEntradaPath_ExcludesListoSubfolder()
+    {
+        var layout = CreateLayout();
+
+        Assert.True(layout.IsIntakeEntradaPath(@"C:\data\entrada\GYE001\lote.pdf"));
+        Assert.False(layout.IsIntakeEntradaPath(@"C:\data\entrada\GYE001\LISTO\lote.pdf"));
     }
 
     [Fact]
@@ -59,6 +80,17 @@ public class PathLayoutTests
 
         Assert.True(resolved);
         Assert.Equal("SIN_SUCURSAL", agencia);
+    }
+
+    [Fact]
+    public void ResolveAgencyFromListoPath_ReturnsSucursalCode()
+    {
+        var layout = CreateLayout();
+
+        var resolved = layout.TryResolveAgencyFromEntradaPath(@"C:\data\entrada\QUITO\LISTO\lote.pdf", out var agencia);
+
+        Assert.True(resolved);
+        Assert.Equal("QUITO", agencia);
     }
 
     [Fact]
@@ -86,8 +118,7 @@ public class PathLayoutTests
         var options = Options.Create(new DocNativeOptions
         {
             OutputRoot = @"C:\data\entrada",
-            ProcesandoRoot = @"C:\data\procesando",
-            PreProcesadoRoot = @"C:\data\preprocesado",
+            WorkRoot = @"C:\Users\test\AppData\Local\DocNative\work",
             SalidaRoot = @"C:\data\salida",
             ErrorRoot = string.Empty
         });
