@@ -10,9 +10,12 @@ public sealed class HotfolderWatcher : IDisposable
     private readonly DocNativeOptions _options;
     private readonly ILogger<HotfolderWatcher> _logger;
     private readonly ConcurrentDictionary<string, byte> _pending = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _lifecycleLock = new();
     private FileSystemWatcher? _watcher;
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
+    private bool _started;
+    private bool _stopped;
 
     public event Func<string, Task>? PdfDetected;
 
@@ -24,6 +27,16 @@ public sealed class HotfolderWatcher : IDisposable
 
     public void Start()
     {
+        lock (_lifecycleLock)
+        {
+            if (_started)
+            {
+                return;
+            }
+
+            _started = true;
+        }
+
         Directory.CreateDirectory(_options.OutputRoot);
         Directory.CreateDirectory(_options.ProcesandoRoot);
         Directory.CreateDirectory(_options.PreProcesadoRoot);
@@ -122,30 +135,69 @@ public sealed class HotfolderWatcher : IDisposable
         }
     }
 
-    public void Dispose()
+    public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        _pollCts?.Cancel();
-        if (_pollTask is not null)
+        lock (_lifecycleLock)
+        {
+            if (_stopped)
+            {
+                return;
+            }
+
+            _stopped = true;
+        }
+
+        var pollCts = _pollCts;
+        var pollTask = _pollTask;
+        var watcher = _watcher;
+
+        if (pollCts is not null)
         {
             try
             {
-                _pollTask.Wait(TimeSpan.FromSeconds(2));
+                await pollCts.CancelAsync().ConfigureAwait(false);
             }
-            catch
+            catch (ObjectDisposedException)
             {
-                // ignore shutdown race
+                // otro hilo ya liberó el CTS durante el apagado del host
             }
         }
 
-        if (_watcher is not null)
+        if (pollTask is not null)
         {
-            _watcher.EnableRaisingEvents = false;
-            _watcher.Created -= OnChanged;
-            _watcher.Changed -= OnChanged;
-            _watcher.Renamed -= OnRenamed;
-            _watcher.Dispose();
+            try
+            {
+                await pollTask.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogDebug("Polling de hotfolder no finalizó dentro del tiempo de espera");
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // apagado forzado del host
+            }
         }
 
-        _pollCts?.Dispose();
+        if (watcher is not null)
+        {
+            watcher.EnableRaisingEvents = false;
+            watcher.Created -= OnChanged;
+            watcher.Changed -= OnChanged;
+            watcher.Renamed -= OnRenamed;
+            watcher.Dispose();
+            _watcher = null;
+        }
+
+        pollCts?.Dispose();
+        _pollCts = null;
+        _pollTask = null;
+
+        _logger.LogDebug("Hotfolder detenido");
+    }
+
+    public void Dispose()
+    {
+        StopAsync().GetAwaiter().GetResult();
     }
 }

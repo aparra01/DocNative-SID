@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- OpenCvSharp 4.13 trae analizadores compilados con Roslyn 4.14; .NET 8 SDK usa Roslyn 4.11 -->
+    <NoWarn>$(NoWarn);CS9057</NoWarn>
+  </PropertyGroup>
+</Project>
