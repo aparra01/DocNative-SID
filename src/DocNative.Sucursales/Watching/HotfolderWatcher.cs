@@ -24,8 +24,8 @@ public sealed class HotfolderWatcher : IDisposable
 
     public void Start()
     {
-        Directory.CreateDirectory(_options.RawRoot);
-        _watcher = new FileSystemWatcher(_options.RawRoot)
+        Directory.CreateDirectory(_options.OutputRoot);
+        _watcher = new FileSystemWatcher(_options.OutputRoot)
         {
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
@@ -40,7 +40,7 @@ public sealed class HotfolderWatcher : IDisposable
         _pollCts = new CancellationTokenSource();
         _pollTask = Task.Run(() => PollExistingFilesAsync(_pollCts.Token));
 
-        _logger.LogInformation("Hotfolder activo en {RawRoot}", _options.RawRoot);
+        _logger.LogInformation("Hotfolder activo en ENTRADA {OutputRoot}", _options.OutputRoot);
     }
 
     private void OnChanged(object sender, FileSystemEventArgs e) => EnqueueIfPdf(e.FullPath);
@@ -50,6 +50,11 @@ public sealed class HotfolderWatcher : IDisposable
     private void EnqueueIfPdf(string path)
     {
         if (!path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (path.EndsWith(".processing", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -86,9 +91,9 @@ public sealed class HotfolderWatcher : IDisposable
         {
             try
             {
-                if (Directory.Exists(_options.RawRoot))
+                if (Directory.Exists(_options.OutputRoot))
                 {
-                    foreach (var file in Directory.EnumerateFiles(_options.RawRoot, "*.pdf", SearchOption.AllDirectories))
+                    foreach (var file in Directory.EnumerateFiles(_options.OutputRoot, "*.pdf", SearchOption.AllDirectories))
                     {
                         EnqueueIfPdf(file);
                     }

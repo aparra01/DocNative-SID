@@ -14,5 +14,7 @@ public interface IPathLayout
 
     string GetCsvFilePath(DateOnly date);
 
+    bool TryResolveAgencyFromEntradaPath(string pdfPath, out string agencia);
+
     bool TryResolveAgencyFromRawPath(string pdfPath, out string agencia);
 }

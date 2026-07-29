@@ -54,9 +54,14 @@ public sealed class DocumentProcessorService
                 return;
             }
 
+            if (pdfPath.EndsWith(".processing", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             if (!_sucursalResolver.TryResolve(pdfPath, out var agencia))
             {
-                await _errorHandler.HandleAsync(pdfPath, _options.SinSucursalCode, "Ruta fuera de RAW root", cancellationToken).ConfigureAwait(false);
+                await _errorHandler.HandleAsync(pdfPath, _options.SinSucursalCode, "Ruta fuera de ENTRADA root", cancellationToken).ConfigureAwait(false);
                 return;
             }
 
@@ -66,11 +71,8 @@ public sealed class DocumentProcessorService
                 return;
             }
 
-            var outputDirectory = _pathLayout.GetAgencyOutputDirectory(agencia);
-            Directory.CreateDirectory(outputDirectory);
-
-            var outputPath = Path.Combine(outputDirectory, Path.GetFileName(pdfPath));
-            var tempOutputPath = outputPath + ".processing";
+            var outputPath = pdfPath;
+            var tempOutputPath = pdfPath + ".processing";
 
             PipelineResult result;
             try
@@ -101,13 +103,8 @@ public sealed class DocumentProcessorService
 
             File.Move(result.OutputPath, outputPath, overwrite: true);
 
-            if (File.Exists(pdfPath))
-            {
-                File.Delete(pdfPath);
-            }
-
             _logger.LogInformation(
-                "PDF listo para OCR. Agencia={Agencia}, Archivo={Archivo}, Eliminadas={Removed}, Rotadas={Rotated}",
+                "PDF pre-procesado in-place. Agencia={Agencia}, Archivo={Archivo}, Eliminadas={Removed}, Rotadas={Rotated}",
                 agencia,
                 Path.GetFileName(outputPath),
                 result.PagesRemoved,

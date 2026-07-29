@@ -15,7 +15,7 @@ public sealed class CsvReportGenerator : ICsvReportGenerator
     {
         Directory.CreateDirectory(outputDirectory);
 
-        var csvPath = Path.Combine(outputDirectory, $"errores_{date:yyyyMMdd}.csv");
+        var csvPath = Path.Combine(outputDirectory, $"errores_{date:dd_MM_yyyy}.csv");
         var builder = new StringBuilder();
         builder.AppendLine("#,Fecha,Hora,Agencia,Nombre PDF,Tipo Error");
 

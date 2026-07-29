@@ -24,7 +24,7 @@ public sealed class ErrorHandler : IErrorHandler
     {
         var now = DateTime.Now;
         var date = DateOnly.FromDateTime(now);
-        var destinationDirectory = _pathLayout.GetAgencyErrorDirectory(date, agencia);
+        var destinationDirectory = _pathLayout.GetDateErrorDirectory(date);
         Directory.CreateDirectory(destinationDirectory);
 
         var fileName = Path.GetFileName(sourcePdfPath);

@@ -46,9 +46,11 @@ builder.Services.AddQuartzHostedService(options =>
 var host = builder.Build();
 
 Log.Information(
-    "DocNative.Sucursales iniciando. RAW={RawRoot}, ENTRADA={OutputRoot}, ERROR={ErrorRoot}",
-    docNativeOptions.RawRoot,
+    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}",
     docNativeOptions.OutputRoot,
-    docNativeOptions.ErrorRoot);
+    docNativeOptions.SalidaRoot,
+    string.IsNullOrWhiteSpace(docNativeOptions.ErrorRoot)
+        ? Path.Combine(docNativeOptions.SalidaRoot, "ERROR")
+        : docNativeOptions.ErrorRoot);
 
 await host.RunAsync();

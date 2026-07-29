@@ -20,30 +20,30 @@ public sealed class PathLayout : IPathLayout
         Path.Combine(Normalize(_options.OutputRoot), SanitizeAgency(agencia));
 
     public string GetAgencyErrorDirectory(DateOnly date, string agencia) =>
-        Path.Combine(GetDateErrorDirectory(date), SanitizeAgency(agencia));
+        GetDateErrorDirectory(date);
 
     public string GetDateErrorDirectory(DateOnly date) =>
-        Path.Combine(Normalize(_options.ErrorRoot), date.ToString("yyyyMMdd"));
+        Path.Combine(EffectiveErrorRoot, FormatDateFolder(date));
 
     public string GetRegistryFilePath(DateOnly date) =>
         Path.Combine(GetDateErrorDirectory(date), "_registry.jsonl");
 
     public string GetCsvFilePath(DateOnly date) =>
-        Path.Combine(GetDateErrorDirectory(date), $"errores_{date:yyyyMMdd}.csv");
+        Path.Combine(GetDateErrorDirectory(date), $"errores_{FormatDateFolder(date)}.csv");
 
-    public bool TryResolveAgencyFromRawPath(string pdfPath, out string agencia)
+    public bool TryResolveAgencyFromEntradaPath(string pdfPath, out string agencia)
     {
         agencia = string.Empty;
-        var rawRoot = Normalize(_options.RawRoot);
+        var entradaRoot = Normalize(_options.OutputRoot);
         var fullPdfPath = Normalize(pdfPath);
         var pdfDirectory = Normalize(Path.GetDirectoryName(fullPdfPath) ?? string.Empty);
 
-        if (!pdfDirectory.StartsWith(rawRoot, StringComparison.OrdinalIgnoreCase))
+        if (!pdfDirectory.StartsWith(entradaRoot, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        var relative = pdfDirectory[rawRoot.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var relative = pdfDirectory[entradaRoot.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(relative))
         {
             agencia = _options.SinSucursalCode;
@@ -60,6 +60,24 @@ public sealed class PathLayout : IPathLayout
         agencia = firstSegment.Trim().ToUpperInvariant();
         return true;
     }
+
+    public bool TryResolveAgencyFromRawPath(string pdfPath, out string agencia) =>
+        TryResolveAgencyFromEntradaPath(pdfPath, out agencia);
+
+    private string EffectiveErrorRoot
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_options.ErrorRoot))
+            {
+                return Normalize(_options.ErrorRoot);
+            }
+
+            return Path.Combine(Normalize(_options.SalidaRoot), "ERROR");
+        }
+    }
+
+    private static string FormatDateFolder(DateOnly date) => date.ToString("dd_MM_yyyy");
 
     private static string SanitizeAgency(string agencia)
     {

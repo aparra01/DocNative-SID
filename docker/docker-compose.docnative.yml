@@ -14,12 +14,11 @@ services:
     restart: unless-stopped
     isolation: process
     volumes:
-      - "${DOCNATIVE_HOST_RAW:-D:/SID/COOPROGRESO/PAGAREOCR/RAW}:C:/mnt/PagareOcrRaw:rw"
       - "${PYVISION_HOST_PAGAREOCR_ENTRADA:-D:/SID/COOPROGRESO/PAGAREOCR/ENTRADA}:C:/mnt/PagareOcrEntrada:rw"
-      - "${DOCNATIVE_HOST_ERROR:-D:/SID/COOPROGRESO/PAGAREOCR/error}:C:/mnt/PagareOcrError:rw"
+      - "${PYVISION_HOST_PAGAREOCR_SALIDA:-D:/SID/COOPROGRESO/PAGAREOCR/SALIDA}:C:/mnt/PagareOcrSalida:rw"
     environment:
-      DocNative__RawRoot: "C:/mnt/PagareOcrRaw"
       DocNative__OutputRoot: "C:/mnt/PagareOcrEntrada"
-      DocNative__ErrorRoot: "C:/mnt/PagareOcrError"
+      DocNative__SalidaRoot: "C:/mnt/PagareOcrSalida"
+      DocNative__ErrorRoot: ""
       DocNative__CsvReportTime: "${DOCNATIVE_CSV_REPORT_TIME:-23:50}"
       DocNative__BlankPageThreshold: "${DOCNATIVE_BLANK_PAGE_THRESHOLD:-0.02}"
