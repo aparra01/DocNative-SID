@@ -12,5 +12,5 @@ public sealed class SucursalResolver
     }
 
     public bool TryResolve(string pdfPath, out string agencia) =>
-        _pathLayout.TryResolveAgencyFromEntradaPath(pdfPath, out agencia);
+        _pathLayout.TryResolveAgencyFromStagingPath(pdfPath, out agencia);
 }

@@ -17,4 +17,12 @@ public interface IPathLayout
     bool TryResolveAgencyFromEntradaPath(string pdfPath, out string agencia);
 
     bool TryResolveAgencyFromRawPath(string pdfPath, out string agencia);
+
+    bool TryResolveAgencyFromStagingPath(string pdfPath, out string agencia);
+
+    string GetProcesandoPath(string agencia, string fileName);
+
+    string GetPreProcesadoPath(string agencia, string fileName);
+
+    bool TryLocateRelocatedPdf(string fileName, int maxAgeMinutes, out string locatedPath);
 }

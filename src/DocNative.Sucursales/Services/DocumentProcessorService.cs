@@ -1,6 +1,7 @@
 using DocNative.Core.Abstractions;
 using DocNative.Core.Configuration;
 using DocNative.Core.Models;
+using DocNative.Core.Utilities;
 using DocNative.Sucursales.Watching;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -51,6 +52,7 @@ public sealed class DocumentProcessorService
         {
             if (!File.Exists(pdfPath))
             {
+                _logger.LogDebug("PDF no encontrado al iniciar procesamiento | Ruta={Ruta}", pdfPath);
                 return;
             }
 
@@ -61,54 +63,138 @@ public sealed class DocumentProcessorService
 
             if (!_sucursalResolver.TryResolve(pdfPath, out var agencia))
             {
-                await _errorHandler.HandleAsync(pdfPath, _options.SinSucursalCode, "Ruta fuera de ENTRADA root", cancellationToken).ConfigureAwait(false);
+                await _errorHandler.HandleAsync(pdfPath, _options.SinSucursalCode, "Ruta fuera de carpetas de staging", cancellationToken).ConfigureAwait(false);
                 return;
             }
 
-            if (!await _stabilityChecker.WaitUntilStableAsync(pdfPath, cancellationToken).ConfigureAwait(false))
+            var normalizedPath = _pathLayout.Normalize(pdfPath);
+            var procesandoRoot = _pathLayout.Normalize(_options.ProcesandoRoot);
+            var alreadyInProcesando = normalizedPath.StartsWith(procesandoRoot, StringComparison.OrdinalIgnoreCase);
+
+            string workingPath;
+            string correlationId;
+
+            if (alreadyInProcesando)
             {
-                await _errorHandler.HandleAsync(pdfPath, agencia, "Archivo bloqueado o inestable", cancellationToken).ConfigureAwait(false);
-                return;
+                workingPath = pdfPath;
+                try
+                {
+                    correlationId = FileHashHelper.ComputeSha256Hex(workingPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "No se pudo calcular hash | Ruta={Ruta}", workingPath);
+                    correlationId = "desconocido";
+                }
+
+                _logger.LogInformation(
+                    "Reanudando PDF en PROCESANDO | CorrelationId={CorrelationId} | Ruta={Ruta}",
+                    correlationId,
+                    workingPath);
+            }
+            else
+            {
+                if (!await _stabilityChecker.WaitUntilStableAsync(pdfPath, cancellationToken).ConfigureAwait(false))
+                {
+                    await _errorHandler.HandleAsync(pdfPath, agencia, "Archivo bloqueado o inestable", cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                var fileName = Path.GetFileName(pdfPath);
+                try
+                {
+                    correlationId = FileHashHelper.ComputeSha256Hex(pdfPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "No se pudo calcular hash | Ruta={Ruta}", pdfPath);
+                    correlationId = "desconocido";
+                }
+
+                workingPath = _pathLayout.GetProcesandoPath(agencia, fileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(workingPath)!);
+
+                try
+                {
+                    File.Move(pdfPath, workingPath);
+                }
+                catch (FileNotFoundException)
+                {
+                    _logger.LogInformation(
+                        "Archivo ya reclamado | CorrelationId={CorrelationId} | Ruta={Ruta}",
+                        correlationId,
+                        pdfPath);
+                    return;
+                }
+                catch (IOException ex)
+                {
+                    _logger.LogInformation(
+                        ex,
+                        "Claim fallido (otro worker?) | CorrelationId={CorrelationId} | Ruta={Ruta}",
+                        correlationId,
+                        pdfPath);
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "PDF reclamado en PROCESANDO | CorrelationId={CorrelationId} | Agencia={Agencia} | Archivo={Archivo} | Destino={Destino}",
+                    correlationId,
+                    agencia,
+                    fileName,
+                    workingPath);
             }
 
-            var outputPath = pdfPath;
-            var tempOutputPath = pdfPath + ".processing";
+            var outputFileName = Path.GetFileName(workingPath);
+
+            var tempOutputPath = workingPath + ".processing";
 
             PipelineResult result;
             try
             {
-                result = _pipeline.Process(pdfPath, tempOutputPath);
+                result = _pipeline.Process(workingPath, tempOutputPath);
             }
             catch (Exception ex)
             {
-                await _errorHandler.HandleAsync(pdfPath, agencia, $"Error de lectura: {ex.Message}", cancellationToken).ConfigureAwait(false);
+                await _errorHandler.HandleAsync(workingPath, agencia, $"Error de lectura: {ex.Message}", cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (result.ErrorKind == PipelineErrorKind.RelocatedByOtherProcess)
+            {
+                _logger.LogInformation(
+                    "Archivo ya movido por PyVision | CorrelationId={CorrelationId} | Ubicacion={Ubicacion}",
+                    correlationId,
+                    result.RelocatedPath);
+                CleanupTempFile(tempOutputPath);
                 return;
             }
 
             if (!result.Success || string.IsNullOrWhiteSpace(result.OutputPath))
             {
-                await _errorHandler.HandleAsync(pdfPath, agencia, result.ErrorMessage ?? "Error de procesamiento", cancellationToken).ConfigureAwait(false);
-                if (File.Exists(tempOutputPath))
-                {
-                    File.Delete(tempOutputPath);
-                }
-
+                await _errorHandler.HandleAsync(workingPath, agencia, result.ErrorMessage ?? "Error de procesamiento", cancellationToken).ConfigureAwait(false);
+                CleanupTempFile(tempOutputPath);
                 return;
             }
 
-            if (File.Exists(outputPath))
+            var preProcesadoPath = _pathLayout.GetPreProcesadoPath(agencia, outputFileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(preProcesadoPath)!);
+
+            if (File.Exists(preProcesadoPath))
             {
-                File.Delete(outputPath);
+                File.Delete(preProcesadoPath);
             }
 
-            File.Move(result.OutputPath, outputPath, overwrite: true);
+            File.Move(result.OutputPath, preProcesadoPath, overwrite: true);
+            CleanupSourceFile(workingPath);
 
             _logger.LogInformation(
-                "PDF pre-procesado in-place. Agencia={Agencia}, Archivo={Archivo}, Eliminadas={Removed}, Rotadas={Rotated}",
+                "PDF entregado a PRE_PROCESADO | CorrelationId={CorrelationId} | Agencia={Agencia} | Archivo={Archivo} | Eliminadas={Removed} | Rotadas={Rotated} | Destino={Destino}",
+                correlationId,
                 agencia,
-                Path.GetFileName(outputPath),
+                outputFileName,
                 result.PagesRemoved,
-                result.PagesRotated);
+                result.PagesRotated,
+                preProcesadoPath);
         }
         finally
         {
@@ -116,6 +202,22 @@ public sealed class DocumentProcessorService
             {
                 _inProgress.Remove(pdfPath);
             }
+        }
+    }
+
+    private static void CleanupTempFile(string tempOutputPath)
+    {
+        if (File.Exists(tempOutputPath))
+        {
+            File.Delete(tempOutputPath);
+        }
+    }
+
+    private static void CleanupSourceFile(string workingPath)
+    {
+        if (File.Exists(workingPath))
+        {
+            File.Delete(workingPath);
         }
     }
 }

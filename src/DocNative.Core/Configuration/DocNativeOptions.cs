@@ -8,8 +8,14 @@ public sealed class DocNativeOptions
     [Obsolete("RawRoot ya no se usa; escaneo directo a OutputRoot (ENTRADA).")]
     public string RawRoot { get; set; } = @"C:\mnt\PagareOcrRaw";
 
-    /// <summary>Carpeta vigilada: ENTRADA/&lt;codigo&gt;/ (escaneo + pre-procesamiento in-place).</summary>
+    /// <summary>Carpeta vigilada: ENTRADA/&lt;codigo&gt;/ (escaneo MFP).</summary>
     public string OutputRoot { get; set; } = @"C:\mnt\PagareOcrEntrada";
+
+    /// <summary>Claim exclusivo DocNative durante Render+Rewrite.</summary>
+    public string ProcesandoRoot { get; set; } = @"C:\mnt\PagareOcrProcesando";
+
+    /// <summary>Entrega post pre-procesamiento; PyVision vigila esta carpeta.</summary>
+    public string PreProcesadoRoot { get; set; } = @"C:\mnt\PagareOcrPreProcesado";
 
     /// <summary>Raíz SALIDA de PyVision; si <see cref="ErrorRoot"/> está vacío, errores en {SalidaRoot}/ERROR.</summary>
     public string SalidaRoot { get; set; } = @"C:\mnt\PagareOcrSalida";

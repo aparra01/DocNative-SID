@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using DocNative.Core.Configuration;
-using Microsoft.Extensions.Logging;
+using DocNative.Core.Paths;
 using Microsoft.Extensions.Options;
 
 namespace DocNative.Sucursales.Watching;
@@ -25,6 +25,9 @@ public sealed class HotfolderWatcher : IDisposable
     public void Start()
     {
         Directory.CreateDirectory(_options.OutputRoot);
+        Directory.CreateDirectory(_options.ProcesandoRoot);
+        Directory.CreateDirectory(_options.PreProcesadoRoot);
+
         _watcher = new FileSystemWatcher(_options.OutputRoot)
         {
             IncludeSubdirectories = true,
@@ -40,7 +43,10 @@ public sealed class HotfolderWatcher : IDisposable
         _pollCts = new CancellationTokenSource();
         _pollTask = Task.Run(() => PollExistingFilesAsync(_pollCts.Token));
 
-        _logger.LogInformation("Hotfolder activo en ENTRADA {OutputRoot}", _options.OutputRoot);
+        _logger.LogInformation(
+            "Hotfolder activo en ENTRADA {OutputRoot} (backlog PROCESANDO en {ProcesandoRoot})",
+            _options.OutputRoot,
+            _options.ProcesandoRoot);
     }
 
     private void OnChanged(object sender, FileSystemEventArgs e) => EnqueueIfPdf(e.FullPath);
@@ -91,13 +97,8 @@ public sealed class HotfolderWatcher : IDisposable
         {
             try
             {
-                if (Directory.Exists(_options.OutputRoot))
-                {
-                    foreach (var file in Directory.EnumerateFiles(_options.OutputRoot, "*.pdf", SearchOption.AllDirectories))
-                    {
-                        EnqueueIfPdf(file);
-                    }
-                }
+                PollRoot(_options.OutputRoot);
+                PollRoot(_options.ProcesandoRoot);
             }
             catch (Exception ex)
             {
@@ -105,6 +106,19 @@ public sealed class HotfolderWatcher : IDisposable
             }
 
             await Task.Delay(_options.PollingIntervalMs, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private void PollRoot(string root)
+    {
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.pdf", SearchOption.AllDirectories))
+        {
+            EnqueueIfPdf(file);
         }
     }
 

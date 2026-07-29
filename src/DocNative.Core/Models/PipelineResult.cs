@@ -8,6 +8,10 @@ public sealed class PipelineResult
 
     public string? ErrorMessage { get; init; }
 
+    public PipelineErrorKind ErrorKind { get; init; }
+
+    public string? RelocatedPath { get; init; }
+
     public int PagesRemoved { get; init; }
 
     public int PagesRotated { get; init; }
@@ -25,6 +29,16 @@ public sealed class PipelineResult
         new()
         {
             Success = false,
+            ErrorKind = PipelineErrorKind.ProcessingError,
             ErrorMessage = message
+        };
+
+    public static PipelineResult Relocated(string relocatedPath) =>
+        new()
+        {
+            Success = false,
+            ErrorKind = PipelineErrorKind.RelocatedByOtherProcess,
+            RelocatedPath = relocatedPath,
+            ErrorMessage = "Archivo ya movido por otro proceso"
         };
 }

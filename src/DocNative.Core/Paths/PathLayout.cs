@@ -31,19 +31,116 @@ public sealed class PathLayout : IPathLayout
     public string GetCsvFilePath(DateOnly date) =>
         Path.Combine(GetDateErrorDirectory(date), $"errores_{FormatDateFolder(date)}.csv");
 
-    public bool TryResolveAgencyFromEntradaPath(string pdfPath, out string agencia)
-    {
-        agencia = string.Empty;
-        var entradaRoot = Normalize(_options.OutputRoot);
-        var fullPdfPath = Normalize(pdfPath);
-        var pdfDirectory = Normalize(Path.GetDirectoryName(fullPdfPath) ?? string.Empty);
+    public string GetProcesandoPath(string agencia, string fileName) =>
+        Path.Combine(Normalize(_options.ProcesandoRoot), SanitizeAgency(agencia), fileName);
 
-        if (!pdfDirectory.StartsWith(entradaRoot, StringComparison.OrdinalIgnoreCase))
+    public string GetPreProcesadoPath(string agencia, string fileName) =>
+        Path.Combine(Normalize(_options.PreProcesadoRoot), SanitizeAgency(agencia), fileName);
+
+    public bool TryResolveAgencyFromEntradaPath(string pdfPath, out string agencia) =>
+        TryResolveAgencyFromRoot(pdfPath, Normalize(_options.OutputRoot), out agencia);
+
+    public bool TryResolveAgencyFromRawPath(string pdfPath, out string agencia) =>
+        TryResolveAgencyFromEntradaPath(pdfPath, out agencia);
+
+    public bool TryResolveAgencyFromStagingPath(string pdfPath, out string agencia)
+    {
+        if (TryResolveAgencyFromRoot(pdfPath, Normalize(_options.OutputRoot), out agencia))
+        {
+            return true;
+        }
+
+        if (TryResolveAgencyFromRoot(pdfPath, Normalize(_options.ProcesandoRoot), out agencia))
+        {
+            return true;
+        }
+
+        return TryResolveAgencyFromRoot(pdfPath, Normalize(_options.PreProcesadoRoot), out agencia);
+    }
+
+    public bool TryLocateRelocatedPdf(string fileName, int maxAgeMinutes, out string locatedPath)
+    {
+        locatedPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(fileName))
         {
             return false;
         }
 
-        var relative = pdfDirectory[entradaRoot.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var cutoff = DateTime.Now.AddMinutes(-maxAgeMinutes);
+        string? bestPath = null;
+        var bestTime = DateTime.MinValue;
+
+        void ConsiderMatch(string path)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || !info.Name.Equals(fileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (info.LastWriteTime > bestTime && info.LastWriteTime >= cutoff)
+                {
+                    bestTime = info.LastWriteTime;
+                    bestPath = path;
+                }
+            }
+            catch
+            {
+                // ignore inaccessible paths during scan
+            }
+        }
+
+        var salidaRoot = Normalize(_options.SalidaRoot);
+        var errorRoot = EffectiveErrorRoot;
+
+        if (Directory.Exists(errorRoot))
+        {
+            foreach (var path in Directory.EnumerateFiles(errorRoot, fileName, SearchOption.AllDirectories))
+            {
+                ConsiderMatch(path);
+            }
+        }
+
+        if (Directory.Exists(salidaRoot))
+        {
+            foreach (var agencyDir in Directory.EnumerateDirectories(salidaRoot))
+            {
+                var procesadosDir = Path.Combine(agencyDir, "PROCESADOS");
+                if (!Directory.Exists(procesadosDir))
+                {
+                    continue;
+                }
+
+                foreach (var path in Directory.EnumerateFiles(procesadosDir, fileName, SearchOption.TopDirectoryOnly))
+                {
+                    ConsiderMatch(path);
+                }
+            }
+        }
+
+        if (bestPath is null)
+        {
+            return false;
+        }
+
+        locatedPath = bestPath;
+        return true;
+    }
+
+    private bool TryResolveAgencyFromRoot(string pdfPath, string root, out string agencia)
+    {
+        agencia = string.Empty;
+        var fullPdfPath = Normalize(pdfPath);
+        var pdfDirectory = Normalize(Path.GetDirectoryName(fullPdfPath) ?? string.Empty);
+
+        if (!pdfDirectory.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var relative = pdfDirectory[root.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(relative))
         {
             agencia = _options.SinSucursalCode;
@@ -60,9 +157,6 @@ public sealed class PathLayout : IPathLayout
         agencia = firstSegment.Trim().ToUpperInvariant();
         return true;
     }
-
-    public bool TryResolveAgencyFromRawPath(string pdfPath, out string agencia) =>
-        TryResolveAgencyFromEntradaPath(pdfPath, out agencia);
 
     private string EffectiveErrorRoot
     {

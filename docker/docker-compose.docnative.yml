@@ -15,9 +15,13 @@ services:
     isolation: process
     volumes:
       - "${PYVISION_HOST_PAGAREOCR_ENTRADA:-D:/SID/COOPROGRESO/PAGAREOCR/ENTRADA}:C:/mnt/PagareOcrEntrada:rw"
+      - "${PYVISION_HOST_PAGAREOCR_PROCESANDO:-D:/SID/COOPROGRESO/PAGAREOCR/PROCESANDO_DOCNATIVE}:C:/mnt/PagareOcrProcesando:rw"
+      - "${PYVISION_HOST_PAGAREOCR_PREPROCESADO:-D:/SID/COOPROGRESO/PAGAREOCR/PRE_PROCESADO}:C:/mnt/PagareOcrPreProcesado:rw"
       - "${PYVISION_HOST_PAGAREOCR_SALIDA:-D:/SID/COOPROGRESO/PAGAREOCR/SALIDA}:C:/mnt/PagareOcrSalida:rw"
     environment:
       DocNative__OutputRoot: "C:/mnt/PagareOcrEntrada"
+      DocNative__ProcesandoRoot: "C:/mnt/PagareOcrProcesando"
+      DocNative__PreProcesadoRoot: "C:/mnt/PagareOcrPreProcesado"
       DocNative__SalidaRoot: "C:/mnt/PagareOcrSalida"
       DocNative__ErrorRoot: ""
       DocNative__CsvReportTime: "${DOCNATIVE_CSV_REPORT_TIME:-23:50}"
