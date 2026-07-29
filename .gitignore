@@ -1,0 +1,13 @@
+## Build artifacts
+bin/
+obj/
+logs/
+*.user
+*.suo
+
+## Test / temp
+TestResults/
+
+## IDE
+.vs/
+.idea/
