@@ -45,9 +45,7 @@ public sealed class PathLayout : IPathLayout
     public string GetDateErrorDirectory(DateOnly date) =>
         Path.Combine(EffectiveErrorRoot, FormatDateFolder(date));
 
-    public string GetRegistryFilePath(DateOnly date) =>
-        Path.Combine(GetDateErrorDirectory(date), "_registry.jsonl");
-
+    /// <summary>Ruta del único CSV diario: …/ERROR/DD_MM_YYYY/errores_DD_MM_YYYY.csv.</summary>
     public string GetCsvFilePath(DateOnly date) =>
         Path.Combine(GetDateErrorDirectory(date), $"errores_{FormatDateFolder(date)}.csv");
 

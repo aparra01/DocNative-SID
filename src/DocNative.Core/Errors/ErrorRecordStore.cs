@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
+using System.Globalization;
+using System.Text;
 using DocNative.Core.Abstractions;
 using DocNative.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -8,8 +9,9 @@ namespace DocNative.Core.Errors;
 
 public sealed class ErrorRecordStore : IErrorRecordStore
 {
-    private readonly ConcurrentDictionary<DateOnly, ConcurrentBag<ErrorRecord>> _records = new();
-    private readonly ConcurrentDictionary<DateOnly, int> _counters = new();
+    private const string CsvHeader = "#,Fecha,Hora,Agencia,Nombre PDF,Tipo Error";
+
+    private readonly ConcurrentDictionary<string, int> _rowCountCache = new();
     private readonly IPathLayout _pathLayout;
     private readonly ILogger<ErrorRecordStore> _logger;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -20,89 +22,129 @@ public sealed class ErrorRecordStore : IErrorRecordStore
         _logger = logger;
     }
 
-    public async Task<ErrorRecord> AddAsync(ErrorRecord record, CancellationToken cancellationToken = default)
+    public async Task AppendErrorAsync(ErrorRecord record, CancellationToken cancellationToken = default)
     {
-        var bag = _records.GetOrAdd(record.Fecha, _ => new ConcurrentBag<ErrorRecord>());
-        bag.Add(record);
-
-        await PersistRecordAsync(record, cancellationToken).ConfigureAwait(false);
-        return record;
-    }
-
-    public Task<IReadOnlyList<ErrorRecord>> GetRecordsForDateAsync(DateOnly date, CancellationToken cancellationToken = default)
-    {
-        if (!_records.TryGetValue(date, out var bag))
-        {
-            return Task.FromResult<IReadOnlyList<ErrorRecord>>(Array.Empty<ErrorRecord>());
-        }
-
-        var ordered = bag.OrderBy(r => r.Id).ThenBy(r => r.Hora).ToList();
-        return Task.FromResult<IReadOnlyList<ErrorRecord>>(ordered);
-    }
-
-    public async Task LoadPersistedRecordsAsync(DateOnly date, CancellationToken cancellationToken = default)
-    {
-        var registryPath = _pathLayout.GetRegistryFilePath(date);
-        if (!File.Exists(registryPath))
-        {
-            return;
-        }
-
-        var lines = await File.ReadAllLinesAsync(registryPath, cancellationToken).ConfigureAwait(false);
-        var bag = _records.GetOrAdd(date, _ => new ConcurrentBag<ErrorRecord>());
-        var maxId = 0;
-
-        foreach (var line in lines)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            try
-            {
-                var record = JsonSerializer.Deserialize<ErrorRecord>(line);
-                if (record is null)
-                {
-                    continue;
-                }
-
-                bag.Add(record);
-                maxId = Math.Max(maxId, record.Id);
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "Linea invalida en registro de errores: {Line}", line);
-            }
-        }
-
-        _counters.AddOrUpdate(date, maxId, (_, current) => Math.Max(current, maxId));
-    }
-
-    public int GetNextId(DateOnly date)
-    {
-        return _counters.AddOrUpdate(date, 1, (_, current) => current + 1);
-    }
-
-    private async Task PersistRecordAsync(ErrorRecord record, CancellationToken cancellationToken)
-    {
-        var registryPath = _pathLayout.GetRegistryFilePath(record.Fecha);
-        var directory = Path.GetDirectoryName(registryPath);
+        var csvPath = _pathLayout.GetCsvFilePath(record.Fecha);
+        var directory = Path.GetDirectoryName(csvPath);
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory);
+            WarnIfExtraCsvFiles(directory, csvPath);
         }
-
-        var json = JsonSerializer.Serialize(record);
 
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await File.AppendAllTextAsync(registryPath, json + Environment.NewLine, cancellationToken).ConfigureAwait(false);
+            var index = GetNextIndex(csvPath);
+            var line = FormatRow(index, record);
+            var writeHeader = !File.Exists(csvPath) || new FileInfo(csvPath).Length == 0;
+
+            await using var stream = new FileStream(
+                csvPath,
+                FileMode.OpenOrCreate,
+                FileAccess.Write,
+                FileShare.None);
+            stream.Seek(0, SeekOrigin.End);
+
+            await using var writer = new StreamWriter(stream, Encoding.UTF8);
+            if (writeHeader)
+            {
+                await writer.WriteLineAsync(CsvHeader.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            await writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _writeLock.Release();
         }
+
+        _logger.LogInformation(
+            "Error registrado en CSV. Agencia={Agencia}, Archivo={Archivo}, TipoError={TipoError}, Csv={CsvPath}",
+            record.Agencia,
+            record.NombrePdf,
+            record.TipoError,
+            csvPath);
+    }
+
+    private int GetNextIndex(string csvPath)
+    {
+        if (_rowCountCache.TryGetValue(csvPath, out var cached))
+        {
+            var next = cached + 1;
+            _rowCountCache[csvPath] = next;
+            return next;
+        }
+
+        var count = 0;
+        if (File.Exists(csvPath))
+        {
+            try
+            {
+                count = Math.Max(0, File.ReadAllLines(csvPath).Length - 1);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(ex, "No se pudo leer CSV para indice: {CsvPath}", csvPath);
+            }
+        }
+
+        var nextIndex = count + 1;
+        _rowCountCache[csvPath] = nextIndex;
+        return nextIndex;
+    }
+
+    private static string FormatRow(int index, ErrorRecord record)
+    {
+        var builder = new StringBuilder();
+        builder.Append(index.ToString(CultureInfo.InvariantCulture));
+        builder.Append(',');
+        builder.Append(Escape(record.Fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+        builder.Append(',');
+        builder.Append(Escape(record.Hora.ToString("HH:mm:ss", CultureInfo.InvariantCulture)));
+        builder.Append(',');
+        builder.Append(Escape(record.Agencia));
+        builder.Append(',');
+        builder.Append(Escape(record.NombrePdf));
+        builder.Append(',');
+        builder.Append(Escape(record.TipoError));
+        return builder.ToString();
+    }
+
+    private static string Escape(string value)
+    {
+        if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
+        {
+            return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+        }
+
+        return value;
+    }
+
+    private void WarnIfExtraCsvFiles(string errorDirectory, string canonicalCsvPath)
+    {
+        if (!Directory.Exists(errorDirectory))
+        {
+            return;
+        }
+
+        var canonicalName = Path.GetFileName(canonicalCsvPath);
+        var extras = Directory.EnumerateFiles(errorDirectory, "*.csv")
+            .Select(Path.GetFileName)
+            .Where(name => !string.Equals(name, canonicalName, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (extras.Count == 0)
+        {
+            return;
+        }
+
+        _logger.LogWarning(
+            "Se espera un solo CSV por día en {ErrorDirectory}. Canonico={CanonicalCsv}. Extras={ExtraCsvFiles}",
+            errorDirectory,
+            canonicalName,
+            string.Join(", ", extras));
     }
 }

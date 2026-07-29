@@ -12,8 +12,6 @@ public interface IPathLayout
 
     string GetDateErrorDirectory(DateOnly date);
 
-    string GetRegistryFilePath(DateOnly date);
-
     string GetCsvFilePath(DateOnly date);
 
     bool TryResolveAgencyFromEntradaPath(string pdfPath, out string agencia);

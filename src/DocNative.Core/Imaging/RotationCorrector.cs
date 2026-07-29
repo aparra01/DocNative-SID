@@ -38,13 +38,40 @@ public sealed class RotationCorrector : IRotationCorrector
         using var binary = new Mat();
         Cv2.Threshold(gray, binary, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
 
-        var topHeight = Math.Max(1, binary.Height / 3);
-        var bottomStart = binary.Height - topHeight;
+        var thirdHeight = Math.Max(1, binary.Height / 3);
 
-        var top = Cv2.CountNonZero(binary[new Rect(0, 0, binary.Width, topHeight)]);
-        var bottom = Cv2.CountNonZero(binary[new Rect(0, bottomStart, binary.Width, topHeight)]);
+        var top = CountInk(binary, new Rect(0, 0, binary.Width, thirdHeight));
+        var middle = CountInk(binary, new Rect(0, thirdHeight, binary.Width, thirdHeight));
+        var bottom = CountInk(
+            binary,
+            new Rect(0, 2 * thirdHeight, binary.Width, binary.Height - (2 * thirdHeight)));
 
-        return bottom > top * 1.25;
+        var total = top + middle + bottom;
+        if (total == 0)
+        {
+            return false;
+        }
+
+        // Hojas de continuación: cuerpo en el tercio central y firmas al pie (sin encabezado arriba).
+        if (middle >= top && middle > bottom * 0.85)
+        {
+            return false;
+        }
+
+        const double TopThirdCenter = 1.0 / 6.0;
+        const double MiddleThirdCenter = 3.0 / 6.0;
+        const double BottomThirdCenter = 5.0 / 6.0;
+
+        var centerOfMass = (top * TopThirdCenter + middle * MiddleThirdCenter + bottom * BottomThirdCenter) / total;
+        var topShare = (double)top / total;
+
+        // Solo rotar cuando casi todo el contenido quedó en la mitad inferior y arriba hay poco encabezado.
+        return centerOfMass > 0.60 && topShare < 0.22;
+    }
+
+    private static int CountInk(Mat binary, Rect region)
+    {
+        return Cv2.CountNonZero(binary[region]);
     }
 
     private static Mat ToGray(Mat image)

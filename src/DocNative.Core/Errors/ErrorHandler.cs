@@ -7,12 +7,12 @@ namespace DocNative.Core.Errors;
 public sealed class ErrorHandler : IErrorHandler
 {
     private readonly IPathLayout _pathLayout;
-    private readonly ErrorRecordStore _errorRecordStore;
+    private readonly IErrorRecordStore _errorRecordStore;
     private readonly ILogger<ErrorHandler> _logger;
 
     public ErrorHandler(
         IPathLayout pathLayout,
-        ErrorRecordStore errorRecordStore,
+        IErrorRecordStore errorRecordStore,
         ILogger<ErrorHandler> logger)
     {
         _pathLayout = pathLayout;
@@ -43,24 +43,24 @@ public sealed class ErrorHandler : IErrorHandler
             File.Move(sourcePdfPath, destinationPath, overwrite: false);
         }
 
+        var destinationFileName = Path.GetFileName(destinationPath);
         var record = new ErrorRecord
         {
-            Id = _errorRecordStore.GetNextId(date),
             Fecha = date,
             Hora = TimeOnly.FromDateTime(now),
             Agencia = agencia,
-            NombrePdf = fileName,
+            NombrePdf = destinationFileName,
             TipoError = tipoError,
             SourcePath = sourcePdfPath,
             DestinationPath = destinationPath
         };
 
-        await _errorRecordStore.AddAsync(record, cancellationToken).ConfigureAwait(false);
+        await _errorRecordStore.AppendErrorAsync(record, cancellationToken).ConfigureAwait(false);
 
         _logger.LogWarning(
             "PDF movido a error. Agencia={Agencia}, Archivo={Archivo}, TipoError={TipoError}, Destino={Destino}",
             agencia,
-            fileName,
+            destinationFileName,
             tipoError,
             destinationPath);
     }

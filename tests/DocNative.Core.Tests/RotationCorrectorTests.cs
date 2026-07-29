@@ -48,4 +48,14 @@ public class RotationCorrectorTests
 
         Assert.True(correction is 90 or 270);
     }
+
+    [Fact]
+    public void DetectPortraitCorrectionDegrees_ReturnsZero_ForContinuationPageWithBottomSignatures()
+    {
+        using var continuationPage = TestImageFactory.CreateWithMiddleAndBottomContent(800, 1100);
+
+        var correction = _corrector.DetectPortraitCorrectionDegrees(continuationPage);
+
+        Assert.Equal(0, correction);
+    }
 }

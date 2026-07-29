@@ -17,6 +17,16 @@ internal static class TestImageFactory
         return image;
     }
 
+    public static Mat CreateWithMiddleAndBottomContent(int width = 800, int height = 1100)
+    {
+        var image = CreateBlank(width, height);
+        Cv2.Rectangle(image, new Rect(80, 400, 640, 260), new Scalar(0, 0, 0), 2);
+        Cv2.PutText(image, "CONTINUACION", new Point(180, 520), HersheyFonts.HersheySimplex, 1.4, new Scalar(0, 0, 0), 2);
+        Cv2.Rectangle(image, new Rect(80, 760, 640, 220), new Scalar(0, 0, 0), 2);
+        Cv2.PutText(image, "FIRMAS", new Point(280, 900), HersheyFonts.HersheySimplex, 1.8, new Scalar(0, 0, 0), 2);
+        return image;
+    }
+
     public static Mat RotateQuarterTurns(Mat source, int quarterTurns)
     {
         var turns = ((quarterTurns % 4) + 4) % 4;

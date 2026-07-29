@@ -20,5 +20,4 @@ services:
       DocNative__OutputRoot: "C:/mnt/PagareOcrEntrada"
       DocNative__SalidaRoot: "C:/mnt/PagareOcrSalida"
       DocNative__ErrorRoot: ""
-      DocNative__CsvReportTime: "${DOCNATIVE_CSV_REPORT_TIME:-23:50}"
       DocNative__BlankPageThreshold: "${DOCNATIVE_BLANK_PAGE_THRESHOLD:-0.02}"

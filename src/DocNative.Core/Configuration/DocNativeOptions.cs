@@ -34,8 +34,6 @@ public sealed class DocNativeOptions
 
     public int RenderDpi { get; set; } = 150;
 
-    public string CsvReportTime { get; set; } = "23:50";
-
     public int FileStabilityMaxWaitSeconds { get; set; } = 20;
 
     public double FileStabilityPollSeconds { get; set; } = 1.5;

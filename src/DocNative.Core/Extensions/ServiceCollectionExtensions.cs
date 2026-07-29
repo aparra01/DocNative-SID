@@ -19,10 +19,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPdfRewriter, PdfRewriteService>();
         services.AddSingleton<IDocumentPipeline, DocumentPipeline>();
         services.AddSingleton<IPathLayout, PathLayout>();
-        services.AddSingleton<ErrorRecordStore>();
-        services.AddSingleton<IErrorRecordStore>(sp => sp.GetRequiredService<ErrorRecordStore>());
+        services.AddSingleton<IErrorRecordStore, ErrorRecordStore>();
         services.AddSingleton<IErrorHandler, ErrorHandler>();
-        services.AddSingleton<ICsvReportGenerator, CsvReportGenerator>();
         return services;
     }
 }

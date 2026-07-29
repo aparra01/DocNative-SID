@@ -7,7 +7,7 @@ Servicio nativo .NET 8 de **pre-procesamiento de PDFs** para el flujo PagareOCR 
 | Proyecto | Tipo | Descripción |
 |----------|------|-------------|
 | `DocNative.Core` | Librería | Render PDF, detección de blanco, rotación, reescritura, errores, CSV |
-| `DocNative.Sucursales` | Worker Service | Hotfolder `ENTRADA/<codigo>/`, job Quartz CSV 23:50 |
+| `DocNative.Sucursales` | Worker Service | Hotfolder `ENTRADA/<codigo>/` |
 | `DocNative.Core.Tests` | xUnit | Tests unitarios |
 
 ## Flujo de datos
@@ -47,7 +47,6 @@ El trabajo interno de DocNative usa `%LOCALAPPDATA%/DocNative/work/<codigo>/` (n
 | `ErrorRoot` | *(vacío → `{SalidaRoot}/ERROR`)* | Errores centralizados + CSV |
 | `BlankPageThreshold` | `0.02` | Umbral stddev normalizado (0–1) para hoja en blanco |
 | `RenderDpi` | `150` | DPI render Docnet |
-| `CsvReportTime` | `23:50` | Hora local generación CSV (`HH:mm`) |
 | `FileStabilityMaxWaitSeconds` | `20` | Espera archivo estable antes de procesar |
 
 ### Variables Docker (host)
@@ -55,7 +54,6 @@ El trabajo interno de DocNative usa `%LOCALAPPDATA%/DocNative/work/<codigo>/` (n
 ```env
 PYVISION_HOST_PAGAREOCR_ENTRADA=D:/SID/COOPROGRESO/PAGAREOCR/ENTRADA
 PYVISION_HOST_PAGAREOCR_SALIDA=D:/SID/COOPROGRESO/PAGAREOCR/SALIDA
-DOCNATIVE_CSV_REPORT_TIME=23:50
 ```
 
 ### Migración BD (PyVision)
@@ -111,14 +109,14 @@ SALIDA/ERROR/
   29_07_2026/
     documento_fallido.pdf
     errores_29_07_2026.csv
-    _registry.jsonl
 ```
 
-CSV (generado a las 23:50, hora local):
+CSV (append inmediato al registrar cada error):
 
 | # | Fecha | Hora | Agencia | Nombre PDF | Tipo Error |
 |---|-------|------|---------|------------|------------|
 
+- **Un solo CSV por día:** `errores_DD_MM_YYYY.csv` dentro de `SALIDA/ERROR/DD_MM_YYYY/`. DocNative y PyVision escriben en el mismo archivo; no se crean CSV por agencia, hora ni tipo de error.
 - **Tipo Error:** descripción legible del motivo (ej. `PDF corrupto`, `Documento sin contenido util`).
 - Hora en formato **24h** (`HH:mm:ss`).
 
@@ -131,7 +129,6 @@ Monte el UNC del servidor impresión directamente en **`ENTRADA/<codigo>/`**. Py
 - **Docnet.Core** — render PDF → imagen (PDFium)
 - **OpenCvSharp4** — detección blanco y orientación
 - **PdfSharpCore** — reescritura PDF (eliminar páginas, rotación)
-- **Quartz.NET** — CSV programado embebido
 - **Serilog** — logging estructurado
 
 ## Opción B (precisión)
@@ -145,7 +142,7 @@ Si OpenCV no alcanza precisión en documentos reales del banco, `IBlankPageDetec
 | Contenedor no arranca | Imagen nanoserver | Usar `servercore-ltsc2022` |
 | `DllNotFoundException` OpenCV | Falta VC++ redist | Dockerfile instala VC++ 2015–2022 x64 |
 | PyVision lee PDF sin procesar | PDF aún en ENTRADA (no en LISTO) o DocNative detenido | Verificar DocNative; PDF debe pasar a `LISTO/` |
-| CSV vacío | Sin errores ese día | Normal; revisar `_registry.jsonl` |
+| CSV vacío | Sin errores ese día | Normal; no hay PDFs fallidos en la carpeta del día |
 
 ## Integración SID
 
