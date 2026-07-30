@@ -35,6 +35,6 @@ WORKDIR C:\\app
 
 COPY --from=build C:\\app\\publish .
 
-ENV DocNative__TesseractExecutablePath=C:\\Program Files\\Tesseract-OCR\\tesseract.exe
+ENV DocNative__TesseractExecutablePath="C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 
 ENTRYPOINT ["DocNative.Sucursales.exe"]
