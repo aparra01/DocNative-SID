@@ -102,6 +102,8 @@ public sealed class DocumentPipeline : IDocumentPipeline
                     });
                 }
 
+                ApplyDocumentRotationConsensus(analysis);
+
                 if (analysis.All(p => p.IsBlank))
                 {
                     return PipelineResult.Fail("Documento sin contenido util");
@@ -162,6 +164,64 @@ public sealed class DocumentPipeline : IDocumentPipeline
         {
             _logger.LogError(ex, "Error procesando PDF {Source}", sourcePdfPath);
             return PipelineResult.Fail($"Error de procesamiento: {ex.Message}");
+        }
+    }
+
+    private void ApplyDocumentRotationConsensus(List<PageAnalysisResult> analysis)
+    {
+        if (!_options.EnableDocumentRotationConsensus)
+        {
+            return;
+        }
+
+        var contentPages = analysis.Where(page => !page.IsBlank).ToList();
+        if (contentPages.Count < 2)
+        {
+            return;
+        }
+
+        var rotationGroups = contentPages
+            .GroupBy(page => page.RotationDegrees)
+            .OrderByDescending(group => group.Count())
+            .ToList();
+
+        var majority = rotationGroups[0];
+        if (majority.Key == 0)
+        {
+            return;
+        }
+
+        var majorityShare = (double)majority.Count() / contentPages.Count;
+        if (majorityShare < _options.DocumentRotationConsensusMinShare)
+        {
+            return;
+        }
+
+        for (var i = 0; i < analysis.Count; i++)
+        {
+            var page = analysis[i];
+            if (page.IsBlank || page.RotationDegrees == majority.Key)
+            {
+                continue;
+            }
+
+            _logger.LogInformation(
+                "Consenso documento: pagina {PageNumber} {OldRotation}° -> {NewRotation}° (mayoria {Share:P0})",
+                page.PageIndex + 1,
+                page.RotationDegrees,
+                majority.Key,
+                majorityShare);
+
+            analysis[i] = new PageAnalysisResult
+            {
+                PageIndex = page.PageIndex,
+                IsBlank = page.IsBlank,
+                RotationDegrees = majority.Key,
+                SourceRotation = page.SourceRotation,
+                SkewDegrees = page.SkewDegrees,
+                OsdConfidence = page.OsdConfidence,
+                DetectionMethod = page.DetectionMethod + "+consensus"
+            };
         }
     }
 

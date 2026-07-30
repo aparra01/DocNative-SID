@@ -53,6 +53,12 @@ public sealed class DocNativeOptions
     /// <summary>Tamaño máximo del lado largo de la imagen enviada a OSD.</summary>
     public int OsdMaxEdgePixels { get; set; } = 2000;
 
+    /// <summary>Aplica la rotación mayoritaria del documento a páginas ambiguas (p. ej. hojas de continuación).</summary>
+    public bool EnableDocumentRotationConsensus { get; set; } = true;
+
+    /// <summary>Fracción mínima de páginas con contenido que deben coincidir para imponer consenso.</summary>
+    public double DocumentRotationConsensusMinShare { get; set; } = 0.6;
+
     public bool EnableDeskew { get; set; } = true;
 
     public double MaxSkewDegrees { get; set; } = 15;
