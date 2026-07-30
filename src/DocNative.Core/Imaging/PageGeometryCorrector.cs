@@ -40,7 +40,7 @@ public sealed class PageGeometryCorrector : IRotationCorrector
         float osdConfidence;
         string detectionMethod;
 
-        if (osdResult.Success && osdResult.OrientationConfidence >= _options.OsdMinConfidence)
+        if (ShouldAcceptOsdResult(osdResult))
         {
             coarseRotation = osdResult.RotateDegrees;
             osdConfidence = osdResult.OrientationConfidence;
@@ -52,10 +52,10 @@ public sealed class PageGeometryCorrector : IRotationCorrector
             osdConfidence = osdResult.OrientationConfidence;
             detectionMethod = "heuristic";
 
-            if (!osdResult.Success || osdResult.OrientationConfidence < _options.OsdMinConfidence)
+            if (!ShouldAcceptOsdResult(osdResult))
             {
                 var reason = osdResult.Success
-                    ? $"confianza OSD {osdResult.OrientationConfidence:F2} < {_options.OsdMinConfidence:F2}"
+                    ? DescribeRejectedOsdConfidence(osdResult)
                     : osdResult.ErrorMessage ?? "OSD fallido";
                 var stderr = Truncate(osdResult.StandardError, 300);
                 _logger.LogWarning(
@@ -83,6 +83,32 @@ public sealed class PageGeometryCorrector : IRotationCorrector
 
         using var preview = ImageRotator.ApplyCoarse(image, coarseRotation);
         return _skewDetector.DetectSkewDegrees(preview);
+    }
+
+    private bool ShouldAcceptOsdResult(OsdResult osdResult)
+    {
+        if (!osdResult.Success)
+        {
+            return false;
+        }
+
+        if (osdResult.OrientationConfidence >= _options.OsdMinConfidence)
+        {
+            return true;
+        }
+
+        return osdResult.RotateDegrees != 0
+            && osdResult.OrientationConfidence >= _options.OsdMinConfidenceForRotation;
+    }
+
+    private string DescribeRejectedOsdConfidence(OsdResult osdResult)
+    {
+        if (osdResult.RotateDegrees != 0)
+        {
+            return $"confianza OSD {osdResult.OrientationConfidence:F2} < {_options.OsdMinConfidenceForRotation:F2} (rotación {osdResult.RotateDegrees}°)";
+        }
+
+        return $"confianza OSD {osdResult.OrientationConfidence:F2} < {_options.OsdMinConfidence:F2}";
     }
 
     private static string Truncate(string? value, int maxLength)

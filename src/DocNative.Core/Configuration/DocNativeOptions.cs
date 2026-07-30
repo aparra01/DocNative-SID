@@ -39,7 +39,16 @@ public sealed class DocNativeOptions
 
     public string TesseractExecutablePath { get; set; } = @"C:\Program Files\Tesseract-OCR\tesseract.exe";
 
-    public double OsdMinConfidence { get; set; } = 1.5;
+    public double OsdMinConfidence { get; set; } = 1.0;
+
+    /// <summary>Umbral OSD más bajo cuando la rotación detectada no es 0° (p. ej. páginas volteadas).</summary>
+    public double OsdMinConfidenceForRotation { get; set; } = 0.3;
+
+    /// <summary>Mínimo de caracteres que Tesseract intenta para OSD (default nativo: 50).</summary>
+    public int OsdMinCharactersToTry { get; set; } = 10;
+
+    /// <summary>Tamaño máximo del lado largo de la imagen enviada a OSD.</summary>
+    public int OsdMaxEdgePixels { get; set; } = 2000;
 
     public bool EnableDeskew { get; set; } = true;
 

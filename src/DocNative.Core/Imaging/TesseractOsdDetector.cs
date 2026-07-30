@@ -7,8 +7,6 @@ namespace DocNative.Core.Imaging;
 
 public sealed class TesseractOsdDetector
 {
-    private const int MaxOsdEdgePixels = 1000;
-
     private readonly DocNativeOptions _options;
 
     public TesseractOsdDetector(IOptions<DocNativeOptions> options)
@@ -41,7 +39,7 @@ public sealed class TesseractOsdDetector
             var startInfo = new ProcessStartInfo
             {
                 FileName = _options.TesseractExecutablePath,
-                Arguments = $"\"{inputPath}\" stdout --psm 0",
+                Arguments = BuildArguments(inputPath),
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -90,20 +88,34 @@ public sealed class TesseractOsdDetector
         }
     }
 
-    private static Mat CreateOsdImage(Mat image)
+    private string BuildArguments(string inputPath)
     {
-        var maxEdge = Math.Max(image.Width, image.Height);
-        if (maxEdge <= MaxOsdEdgePixels)
+        return string.Join(
+            ' ',
+            $"\"{inputPath}\"",
+            "stdout",
+            "--psm 0",
+            $"-c user_defined_dpi={_options.RenderDpi}",
+            $"-c min_characters_to_try={_options.OsdMinCharactersToTry}",
+            "-c min_orientation_margin=3");
+    }
+
+    private Mat CreateOsdImage(Mat image)
+    {
+        using var gray = ImageGrayHelper.ToGray(image);
+        var maxEdge = Math.Max(gray.Width, gray.Height);
+        var maxOsdEdge = Math.Max(500, _options.OsdMaxEdgePixels);
+        if (maxEdge <= maxOsdEdge)
         {
-            return image.Clone();
+            return gray.Clone();
         }
 
-        var scale = MaxOsdEdgePixels / (double)maxEdge;
+        var scale = maxOsdEdge / (double)maxEdge;
         var resized = new Mat();
         Cv2.Resize(
-            image,
+            gray,
             resized,
-            new Size((int)Math.Round(image.Width * scale), (int)Math.Round(image.Height * scale)),
+            new Size((int)Math.Round(gray.Width * scale), (int)Math.Round(gray.Height * scale)),
             interpolation: InterpolationFlags.Area);
         return resized;
     }
