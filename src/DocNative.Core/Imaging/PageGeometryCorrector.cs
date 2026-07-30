@@ -45,6 +45,12 @@ public sealed class PageGeometryCorrector : IRotationCorrector
             coarseRotation = osdResult.RotateDegrees;
             osdConfidence = osdResult.OrientationConfidence;
             detectionMethod = "osd";
+
+            if (coarseRotation == 0
+                && osdConfidence < _options.OsdMinConfidenceForUpright)
+            {
+                coarseRotation = TryFlipCheckCorrection(image, osdConfidence, ref detectionMethod);
+            }
         }
         else
         {
@@ -83,6 +89,36 @@ public sealed class PageGeometryCorrector : IRotationCorrector
 
         using var preview = ImageRotator.ApplyCoarse(image, coarseRotation);
         return _skewDetector.DetectSkewDegrees(preview);
+    }
+
+    private int TryFlipCheckCorrection(Mat image, float originalConfidence, ref string detectionMethod)
+    {
+        using var flipped = ImageRotator.ApplyCoarse(image, 180);
+        var flippedOsd = _osdDetector.Detect(flipped);
+        if (!flippedOsd.Success
+            || flippedOsd.RotateDegrees != 0
+            || flippedOsd.OrientationConfidence < _options.OsdMinConfidenceForUpright)
+        {
+            var heuristicRotation = _heuristicDetector.DetectCoarseRotationDegrees(image);
+            if (heuristicRotation == 0)
+            {
+                return 0;
+            }
+
+            _logger.LogInformation(
+                "Heurística corrige OSD 0° (conf={OrigConf:F1}) -> {Rotation}°",
+                originalConfidence,
+                heuristicRotation);
+            detectionMethod = "osd+heuristic";
+            return heuristicRotation;
+        }
+
+        _logger.LogInformation(
+            "OSD flip-check: original 0° conf={OrigConf:F1}, invertida 0° conf={FlipConf:F1} -> 180°",
+            originalConfidence,
+            flippedOsd.OrientationConfidence);
+        detectionMethod = "osd+flip";
+        return 180;
     }
 
     private bool ShouldAcceptOsdResult(OsdResult osdResult)

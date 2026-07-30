@@ -44,6 +44,9 @@ public sealed class DocNativeOptions
     /// <summary>Umbral OSD más bajo cuando la rotación detectada no es 0° (p. ej. páginas volteadas).</summary>
     public double OsdMinConfidenceForRotation { get; set; } = 0.3;
 
+    /// <summary>Confianza mínima para aceptar OSD=0° sin verificación adicional (flip-check).</summary>
+    public double OsdMinConfidenceForUpright { get; set; } = 2.0;
+
     /// <summary>Mínimo de caracteres que Tesseract intenta para OSD (default nativo: 50).</summary>
     public int OsdMinCharactersToTry { get; set; } = 10;
 
