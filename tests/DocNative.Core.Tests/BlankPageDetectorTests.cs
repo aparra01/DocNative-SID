@@ -18,6 +18,15 @@ public class BlankPageDetectorTests
     }
 
     [Fact]
+    public void IsBlank_ReturnsTrue_ForUniformEmptyRender()
+    {
+        var detector = CreateDetector(0.02);
+        using var image = new Mat(1100, 800, MatType.CV_8UC4, Scalar.All(0));
+
+        Assert.True(detector.IsBlank(image));
+    }
+
+    [Fact]
     public void IsBlank_ReturnsFalse_ForPageWithContent()
     {
         var detector = CreateDetector(0.02);

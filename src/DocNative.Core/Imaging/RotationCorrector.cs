@@ -66,7 +66,7 @@ public sealed class RotationCorrector : IRotationCorrector
         var topShare = (double)top / total;
 
         // Solo rotar cuando casi todo el contenido quedó en la mitad inferior y arriba hay poco encabezado.
-        return centerOfMass > 0.60 && topShare < 0.22;
+        return centerOfMass > 0.52 && topShare < 0.25;
     }
 
     private static int CountInk(Mat binary, Rect region)

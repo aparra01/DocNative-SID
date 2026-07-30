@@ -32,6 +32,9 @@ public sealed class DocNativeOptions
 
     public double BlankPageThreshold { get; set; } = 0.02;
 
+    /// <summary>Fracción máxima de tinta (Otsu) para considerar una página en blanco.</summary>
+    public double BlankPageInkRatioThreshold { get; set; } = 0.015;
+
     public int RenderDpi { get; set; } = 150;
 
     public int FileStabilityMaxWaitSeconds { get; set; } = 20;
