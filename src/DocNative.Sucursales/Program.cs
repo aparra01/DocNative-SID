@@ -43,7 +43,7 @@ var host = builder.Build();
 
 var pathLayout = host.Services.GetRequiredService<DocNative.Core.Abstractions.IPathLayout>();
 Log.Information(
-    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}, ValidarIntercalado={ValidarIntercalado}",
+    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}, ValidarIntercalado={ValidarIntercalado}, PagareSplit={PagareSplitUrl}",
     docNativeOptions.OutputRoot,
     pathLayout.GetWorkRoot(),
     DocNativeOptions.ListoSubfolderName,
@@ -51,6 +51,9 @@ Log.Information(
     string.IsNullOrWhiteSpace(docNativeOptions.ErrorRoot)
         ? Path.Combine(docNativeOptions.SalidaRoot, "ERROR")
         : docNativeOptions.ErrorRoot,
-    docNativeOptions.EnableInterleavedPdfValidation);
+    docNativeOptions.EnableInterleavedPdfValidation,
+    string.IsNullOrWhiteSpace(docNativeOptions.PagareSplitBaseUrl)
+        ? "(no configurado)"
+        : docNativeOptions.PagareSplitBaseUrl);
 
 await host.RunAsync();
