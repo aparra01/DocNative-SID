@@ -31,7 +31,7 @@ public class AmazonasPage3DiagnosticTests
         {
             var options = Options.Create(new DocNativeOptions
             {
-                RenderDpi = 150,
+                RenderDpi = 300,
                 BlankPageThreshold = 0.02,
                 BlankPageInkRatioThreshold = 0.015,
                 OsdMinConfidence = 0.5,
