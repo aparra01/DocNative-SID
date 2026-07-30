@@ -76,4 +76,16 @@ public sealed class DocNativeOptions
     public int PollingIntervalMs { get; set; } = 2000;
 
     public string SinSucursalCode { get; set; } = "SIN_SUCURSAL";
+
+    /// <summary>
+    /// Flujo sucursales (PagareOCR): rechaza PDFs con operaciones intercaladas antes de LISTO/.
+    /// Desactivado por defecto; activar solo en <c>DocNative.Sucursales</c>.
+    /// </summary>
+    public bool EnableInterleavedPdfValidation { get; set; }
+
+    /// <summary>URL base de PagareSplit-SID para validar orden (ej. http://pagaresplit:8006).</summary>
+    public string PagareSplitBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>Timeout en segundos para validación remota con PagareSplit.</summary>
+    public int PagareSplitValidationTimeoutSeconds { get; set; } = 120;
 }

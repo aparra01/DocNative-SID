@@ -23,6 +23,14 @@ builder.Services.AddWindowsService(options => options.ServiceName = "DocNative.S
 
 builder.Services.Configure<DocNativeOptions>(builder.Configuration.GetSection(DocNativeOptions.SectionName));
 builder.Services.AddDocNativeCore();
+builder.Services.AddHttpClient(
+    nameof(SucursalesPdfOrderValidator),
+    (sp, client) =>
+    {
+        var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DocNativeOptions>>().Value;
+        client.Timeout = TimeSpan.FromSeconds(Math.Max(10, options.PagareSplitValidationTimeoutSeconds));
+    });
+builder.Services.AddSingleton<SucursalesPdfOrderValidator>();
 builder.Services.AddSingleton<FileStabilityChecker>();
 builder.Services.AddSingleton<SucursalResolver>();
 builder.Services.AddSingleton<HotfolderWatcher>();
@@ -35,13 +43,14 @@ var host = builder.Build();
 
 var pathLayout = host.Services.GetRequiredService<DocNative.Core.Abstractions.IPathLayout>();
 Log.Information(
-    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}",
+    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}, ValidarIntercalado={ValidarIntercalado}",
     docNativeOptions.OutputRoot,
     pathLayout.GetWorkRoot(),
     DocNativeOptions.ListoSubfolderName,
     docNativeOptions.SalidaRoot,
     string.IsNullOrWhiteSpace(docNativeOptions.ErrorRoot)
         ? Path.Combine(docNativeOptions.SalidaRoot, "ERROR")
-        : docNativeOptions.ErrorRoot);
+        : docNativeOptions.ErrorRoot,
+    docNativeOptions.EnableInterleavedPdfValidation);
 
 await host.RunAsync();

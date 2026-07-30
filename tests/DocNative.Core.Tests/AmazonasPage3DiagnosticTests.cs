@@ -15,6 +15,55 @@ public class AmazonasPage3DiagnosticTests
     private const string TargetPdf =
         @"C:\Users\ander\Desktop\PAGARES FORMATO ACTUAL\20260728130115258.pdf";
 
+    private const string Lote5Pdf =
+        @"C:\Users\ander\Desktop\PAGARES FORMATO ACTUAL\Pagare lote 1 de 5 paginas.pdf";
+
+    [Fact]
+    public void Lote5Paginas_WriteProcessedPdfForOcrDebug()
+    {
+        if (!File.Exists(Lote5Pdf))
+        {
+            return;
+        }
+
+        var outPdf = Path.Combine(Path.GetTempPath(), "debug-lote5-processed.pdf");
+        var options = CreateProductionOptions();
+        RunPipeline(Lote5Pdf, outPdf, options);
+        Assert.True(File.Exists(outPdf));
+    }
+
+    private static DocNativeOptions CreateProductionOptions() => new()
+    {
+        RenderDpi = 300,
+        BlankPageThreshold = 0.02,
+        BlankPageInkRatioThreshold = 0.015,
+        OsdMinConfidence = 0.5,
+        OsdMinConfidenceForRotation = 0.25,
+        OsdMinConfidenceForUpright = 2.0,
+        OsdMinCharactersToTry = 10,
+        OsdMaxEdgePixels = 2000,
+        EnableDocumentRotationConsensus = true,
+        DocumentRotationConsensusMinShare = 0.6,
+        TesseractExecutablePath = Environment.GetEnvironmentVariable("DOCNATIVE_TESSERACT_PATH")
+            ?? @"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    };
+
+    private static void RunPipeline(string inputPdf, string outputPdf, DocNativeOptions opts)
+    {
+        var options = Options.Create(opts);
+        using var renderer = new PdfRenderService(options);
+        var pipeline = new DocumentPipeline(
+            options,
+            new PathLayout(options),
+            renderer,
+            new BlankPageDetector(options),
+            TestGeometryCorrectorFactory.Create(options.Value),
+            TestGeometryCorrectorFactory.CreatePdfRewriter(options.Value),
+            NullLogger<DocumentPipeline>.Instance);
+        var result = pipeline.Process(inputPdf, outputPdf);
+        Assert.True(result.Success, result.ErrorMessage);
+    }
+
     [Fact]
     public void AmazonasPdf_FullPipeline_RotatesAmbiguousPage3ByConsensus()
     {

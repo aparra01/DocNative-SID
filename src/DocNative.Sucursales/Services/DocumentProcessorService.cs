@@ -16,6 +16,7 @@ public sealed class DocumentProcessorService
     private readonly IErrorHandler _errorHandler;
     private readonly FileStabilityChecker _stabilityChecker;
     private readonly SucursalResolver _sucursalResolver;
+    private readonly SucursalesPdfOrderValidator _orderValidator;
     private readonly ILogger<DocumentProcessorService> _logger;
     private readonly HashSet<string> _inProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
@@ -27,6 +28,7 @@ public sealed class DocumentProcessorService
         IErrorHandler errorHandler,
         FileStabilityChecker stabilityChecker,
         SucursalResolver sucursalResolver,
+        SucursalesPdfOrderValidator orderValidator,
         ILogger<DocumentProcessorService> logger)
     {
         _options = options.Value;
@@ -35,6 +37,7 @@ public sealed class DocumentProcessorService
         _errorHandler = errorHandler;
         _stabilityChecker = stabilityChecker;
         _sucursalResolver = sucursalResolver;
+        _orderValidator = orderValidator;
         _logger = logger;
     }
 
@@ -188,6 +191,17 @@ public sealed class DocumentProcessorService
             var outputFileName = Path.GetFileName(workingPath);
 
             var tempOutputPath = workingPath + ".processing";
+
+            var (orderValid, orderError) = await _orderValidator.ValidateAsync(workingPath, cancellationToken).ConfigureAwait(false);
+            if (!orderValid)
+            {
+                await _errorHandler.HandleAsync(
+                    workingPath,
+                    agencia,
+                    orderError ?? "PDF mal ordenado",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
 
             PipelineResult result;
             try

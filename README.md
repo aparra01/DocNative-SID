@@ -47,6 +47,9 @@ El trabajo interno de DocNative usa `%LOCALAPPDATA%/DocNative/work/<codigo>/` (n
 | `ErrorRoot` | *(vacío → `{SalidaRoot}/ERROR`)* | Errores centralizados + CSV |
 | `BlankPageThreshold` | `0.02` | Umbral stddev normalizado (0–1) para hoja en blanco |
 | `RenderDpi` | `150` | DPI render Docnet |
+| `EnableInterleavedPdfValidation` | `false` | **Solo sucursales:** rechazar PDF con operaciones intercaladas |
+| `PagareSplitBaseUrl` | *(vacío)* | URL de PagareSplit-SID para validación de orden |
+| `PagareSplitValidationTimeoutSeconds` | `120` | Timeout HTTP validación sucursales |
 | `FileStabilityMaxWaitSeconds` | `20` | Espera archivo estable antes de procesar |
 
 ### Variables Docker (host)
@@ -117,7 +120,16 @@ CSV (append inmediato al registrar cada error):
 |---|-------|------|---------|------------|------------|
 
 - **Un solo CSV por día:** `errores_DD_MM_YYYY.csv` dentro de `SALIDA/ERROR/DD_MM_YYYY/`. DocNative y PyVision escriben en el mismo archivo; no se crean CSV por agencia, hora ni tipo de error.
-- **Tipo Error:** descripción legible del motivo (ej. `PDF corrupto`, `Documento sin contenido util`).
+- **Tipo Error:** descripción legible del motivo (ej. `PDF corrupto`, `Documento sin contenido util`, `PDF mal ordenado`).
+
+### Flujo sucursales: PDF mal ordenado
+
+Solo en **DocNative.Sucursales** (`EnableInterleavedPdfValidation=true`): antes de entregar a `LISTO/`, consulta **PagareSplit-SID** (`POST /validar-orden-sucursales`) para leer Code39 en todas las páginas. Si las operaciones vienen intercaladas, el PDF va a `SALIDA/ERROR/` con **Tipo Error = `PDF mal ordenado`**. El operador debe re-escanear separando cada pagaré.
+
+Variables Docker (servicio `docnative`):
+
+- `DocNative__EnableInterleavedPdfValidation=true`
+- `DocNative__PagareSplitBaseUrl=http://pagaresplit:8006`
 - Hora en formato **24h** (`HH:mm:ss`).
 
 ## Montaje SMB (producción)
