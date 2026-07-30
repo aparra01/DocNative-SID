@@ -7,10 +7,11 @@ using OpenCvSharp;
 
 namespace DocNative.Core.Tests;
 
+[Collection(nameof(DocnetCollection))]
 public class PagarePruebaPipelineTests
 {
     private const string DefaultPdfPath =
-        @"C:\Users\ander\Desktop\PAGARES FORMATO ACTUAL\pagare_prueba hoja en blanco y volteao.pdf";
+        @"C:\Users\ander\Desktop\PAGARES FORMATO ACTUAL\pagare_prueba_hoja en blanco y volteado version 2.pdf";
 
     [Fact]
     public void PagarePrueba_DiagnosticPipeline_LogsPerPageMetrics()
@@ -45,21 +46,21 @@ public class PagarePruebaPipelineTests
             var isBlank = blankDetector.IsBlank(image);
             var pixelRotation = isBlank ? 0 : rotationCorrector.DetectPortraitCorrectionDegrees(image);
             var sourceRotation = sourceRotations[i];
-            var finalRotation = DocumentPipeline.ResolveRotationDegrees(pixelRotation, sourceRotation);
+            var contentRotation = DocumentPipeline.ResolveContentRotation(pixelRotation, sourceRotation);
 
             Assert.Equal(metrics.IsBlank, isBlank);
 
             Console.WriteLine(
                 $"Pagina {i + 1}/{pages.Count} | {image.Width}x{image.Height} | " +
                 $"mean={metrics.NormalizedMean:F4} stdDev={metrics.NormalizedStdDev:F4} inkRatio={metrics.InkRatio:P2} uniformEmpty={metrics.IsUniformEmptyRender} | " +
-                $"blank={isBlank} | pixelRot={pixelRotation} pdfRot={sourceRotation} finalRot={finalRotation}");
+                $"blank={isBlank} | pixelRot={pixelRotation} pdfRot={sourceRotation} contentRot={contentRotation}");
 
             if (isBlank)
             {
                 blankPages.Add(i + 1);
             }
 
-            if (!isBlank && finalRotation != 0)
+            if (!isBlank && contentRotation != 0)
             {
                 rotatedPages.Add(i + 1);
             }
@@ -70,9 +71,10 @@ public class PagarePruebaPipelineTests
             page.Dispose();
         }
 
-        Assert.Contains(2, blankPages);
+        Assert.Contains(3, blankPages);
         Assert.Contains(1, rotatedPages);
-        Assert.DoesNotContain(3, blankPages);
+        Assert.Contains(4, rotatedPages);
+        Assert.DoesNotContain(2, blankPages);
     }
 
     [Fact]
@@ -89,12 +91,12 @@ public class PagarePruebaPipelineTests
     [InlineData(180, 180, 180)]
     [InlineData(90, 0, 90)]
     [InlineData(0, 0, 0)]
-    public void ResolveRotationDegrees_PrefersPixelDetectionThenPdfMetadata(
+    public void ResolveContentRotation_PrefersPixelDetectionThenPdfMetadata(
         int pixelRotation,
         int sourceRotation,
         int expected)
     {
-        var resolved = DocumentPipeline.ResolveRotationDegrees(pixelRotation, sourceRotation);
+        var resolved = DocumentPipeline.ResolveContentRotation(pixelRotation, sourceRotation);
         Assert.Equal(expected, resolved);
     }
 

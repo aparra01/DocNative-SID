@@ -56,15 +56,15 @@ public sealed class DocumentPipeline : IDocumentPipeline
             {
                 for (var i = 0; i < pageImages.Count; i++)
                 {
-                    using var image = pageImages[i];
+                    var image = pageImages[i];
                     var blankMetrics = BlankPageDetector.Analyze(image, _options);
                     var isBlank = blankMetrics.IsBlank;
                     var pixelRotation = isBlank ? 0 : _rotationCorrector.DetectPortraitCorrectionDegrees(image);
                     var sourceRotation = i < sourceRotations.Count ? sourceRotations[i] : 0;
-                    var rotation = ResolveRotationDegrees(pixelRotation, sourceRotation);
+                    var contentRotation = ResolveContentRotation(pixelRotation, sourceRotation);
 
                     _logger.LogInformation(
-                        "Pagina {PageNumber}/{PageCount} | mean={Mean:F4} stdDev={StdDev:F4} ink={InkRatio:P2} uniformEmpty={UniformEmpty} | blank={IsBlank} | pixelRot={PixelRotation} pdfRot={SourceRotation} finalRot={FinalRotation}",
+                        "Pagina {PageNumber}/{PageCount} | mean={Mean:F4} stdDev={StdDev:F4} ink={InkRatio:P2} uniformEmpty={UniformEmpty} | blank={IsBlank} | pixelRot={PixelRotation} pdfRot={SourceRotation} contentRot={ContentRotation} bake={Bake}",
                         i + 1,
                         pageImages.Count,
                         blankMetrics.NormalizedMean,
@@ -74,15 +74,34 @@ public sealed class DocumentPipeline : IDocumentPipeline
                         isBlank,
                         pixelRotation,
                         sourceRotation,
-                        rotation);
+                        contentRotation,
+                        contentRotation != 0 || sourceRotation != 0);
 
                     analysis.Add(new PageAnalysisResult
                     {
                         PageIndex = i,
                         IsBlank = isBlank,
-                        RotationDegrees = rotation
+                        RotationDegrees = contentRotation,
+                        SourceRotation = sourceRotation
                     });
                 }
+
+                if (analysis.All(p => p.IsBlank))
+                {
+                    return PipelineResult.Fail("Documento sin contenido util");
+                }
+
+                if (!File.Exists(sourcePdfPath))
+                {
+                    return TryRelocatedOrFail(sourcePdfPath, "Archivo no encontrado antes de reescritura");
+                }
+
+                _pdfRewriter.Rewrite(
+                    sourcePdfPath,
+                    destinationPdfPath,
+                    analysis,
+                    pageImages,
+                    _options.RenderDpi);
             }
             finally
             {
@@ -91,18 +110,6 @@ public sealed class DocumentPipeline : IDocumentPipeline
                     image.Dispose();
                 }
             }
-
-            if (analysis.All(p => p.IsBlank))
-            {
-                return PipelineResult.Fail("Documento sin contenido util");
-            }
-
-            if (!File.Exists(sourcePdfPath))
-            {
-                return TryRelocatedOrFail(sourcePdfPath, "Archivo no encontrado antes de reescritura");
-            }
-
-            _pdfRewriter.Rewrite(sourcePdfPath, destinationPdfPath, analysis);
 
             var removed = analysis.Count(p => p.IsBlank);
             var rotated = analysis.Count(p => !p.IsBlank && p.RotationDegrees != 0);
@@ -142,7 +149,7 @@ public sealed class DocumentPipeline : IDocumentPipeline
         }
     }
 
-    internal static int ResolveRotationDegrees(int pixelRotation, int sourceRotation)
+    internal static int ResolveContentRotation(int pixelRotation, int sourceRotation)
     {
         if (pixelRotation != 0)
         {

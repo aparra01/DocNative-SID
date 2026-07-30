@@ -7,4 +7,6 @@ public sealed class PageAnalysisResult
     public bool IsBlank { get; init; }
 
     public int RotationDegrees { get; init; }
+
+    public int SourceRotation { get; init; }
 }

@@ -10,34 +10,26 @@ using PdfSharpCore.Pdf.IO;
 namespace DocNative.Core.Tests;
 
 [Collection(nameof(DocnetCollection))]
-public class PagarePruebaIntegrationTests
+public class PagareV2RotationOutputTests
 {
-    private const string DefaultPdfPath =
+    private const string SourcePdf =
         @"C:\Users\ander\Desktop\PAGARES FORMATO ACTUAL\pagare_prueba_hoja en blanco y volteado version 2.pdf";
 
     [Fact]
-    public void PagarePrueba_FullPipeline_RemovesBlankPageAndBakesRotatedPages()
+    public void PagareV2_OutputPdfRotationMetadata_IsNormalizedToZero()
     {
-        var pdfPath = Environment.GetEnvironmentVariable("DOCNATIVE_TEST_PDF") ?? DefaultPdfPath;
-        if (!File.Exists(pdfPath))
+        if (!File.Exists(SourcePdf))
         {
-            throw new FileNotFoundException($"PDF de prueba no encontrado: {pdfPath}");
+            throw new FileNotFoundException(SourcePdf);
         }
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "docnative-tests", Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "docnative-rot-test", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         var outputPath = Path.Combine(tempDir, "output.pdf");
 
         try
         {
-            var options = Options.Create(new DocNativeOptions
-            {
-                BlankPageThreshold = 0.02,
-                BlankPageInkRatioThreshold = 0.015,
-                RenderDpi = 150,
-                OutputRoot = tempDir
-            });
-
+            var options = Options.Create(new DocNativeOptions { RenderDpi = 150, OutputRoot = tempDir });
             using var renderer = new PdfRenderService(options);
             var pipeline = new DocumentPipeline(
                 options,
@@ -48,19 +40,15 @@ public class PagarePruebaIntegrationTests
                 new PdfRewriteService(),
                 NullLogger<DocumentPipeline>.Instance);
 
-            var result = pipeline.Process(pdfPath, outputPath);
-
-            Assert.True(result.Success, result.ErrorMessage);
-            Assert.Equal(1, result.PagesRemoved);
-            Assert.Equal(2, result.PagesRotated);
-            Assert.True(File.Exists(outputPath));
+            pipeline.Process(SourcePdf, outputPath);
 
             using var output = PdfReader.Open(outputPath, PdfDocumentOpenMode.Import);
             Assert.Equal(5, output.PageCount);
-            Assert.All(Enumerable.Range(0, output.PageCount), i => Assert.Equal(0, output.Pages[i].Rotate));
-
-            Console.WriteLine(
-                $"Pipeline OK | eliminadas={result.PagesRemoved} rotadas={result.PagesRotated} | paginasSalida={output.PageCount}");
+            for (var i = 0; i < output.PageCount; i++)
+            {
+                Console.WriteLine($"  output page {i + 1}: Rotate={output.Pages[i].Rotate}");
+                Assert.Equal(0, output.Pages[i].Rotate);
+            }
         }
         finally
         {

@@ -1,5 +1,8 @@
 using DocNative.Core.Abstractions;
+using DocNative.Core.Imaging;
 using DocNative.Core.Models;
+using OpenCvSharp;
+using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
 
@@ -7,7 +10,12 @@ namespace DocNative.Core.Pdf;
 
 public sealed class PdfRewriteService : IPdfRewriter
 {
-    public void Rewrite(string sourcePdfPath, string destinationPdfPath, IReadOnlyList<PageAnalysisResult> pages)
+    public void Rewrite(
+        string sourcePdfPath,
+        string destinationPdfPath,
+        IReadOnlyList<PageAnalysisResult> pages,
+        IReadOnlyList<Mat> pageImages,
+        int renderDpi)
     {
         var directory = Path.GetDirectoryName(destinationPdfPath);
         if (!string.IsNullOrWhiteSpace(directory))
@@ -25,8 +33,19 @@ public sealed class PdfRewriteService : IPdfRewriter
                 continue;
             }
 
+            if (ShouldBakeFromImage(pageInfo))
+            {
+                if (pageInfo.PageIndex >= pageImages.Count)
+                {
+                    continue;
+                }
+
+                AddRasterPage(output, pageImages[pageInfo.PageIndex], pageInfo.RotationDegrees, renderDpi);
+                continue;
+            }
+
             var imported = output.AddPage(input.Pages[pageInfo.PageIndex]);
-            imported.Rotate = NormalizeRotation(pageInfo.RotationDegrees);
+            imported.Rotate = 0;
         }
 
         if (output.PageCount == 0)
@@ -45,18 +64,28 @@ public sealed class PdfRewriteService : IPdfRewriter
         File.Move(tempPath, destinationPdfPath);
     }
 
-    private static int NormalizeRotation(int degrees)
+    private static bool ShouldBakeFromImage(PageAnalysisResult pageInfo)
     {
-        var normalized = degrees % 360;
-        if (normalized < 0)
-        {
-            normalized += 360;
-        }
+        return pageInfo.RotationDegrees != 0 || pageInfo.SourceRotation != 0;
+    }
 
-        return normalized switch
-        {
-            0 or 90 or 180 or 270 => normalized,
-            _ => 0
-        };
+    private static void AddRasterPage(PdfDocument output, Mat sourceImage, int rotationDegrees, int renderDpi)
+    {
+        using var rotated = ImageRotator.Apply(sourceImage, rotationDegrees);
+        using var bgr = new Mat();
+        Cv2.CvtColor(rotated, bgr, ColorConversionCodes.BGRA2BGR);
+        Cv2.ImEncode(".png", bgr, out var pngBytes);
+
+        var dpi = renderDpi > 0 ? renderDpi : 150;
+        var widthPt = rotated.Width * 72.0 / dpi;
+        var heightPt = rotated.Height * 72.0 / dpi;
+
+        var page = output.AddPage();
+        page.Width = XUnit.FromPoint(widthPt);
+        page.Height = XUnit.FromPoint(heightPt);
+
+        using var gfx = XGraphics.FromPdfPage(page);
+        using var xImage = XImage.FromStream(() => new MemoryStream(pngBytes));
+        gfx.DrawImage(xImage, 0, 0, page.Width, page.Height);
     }
 }

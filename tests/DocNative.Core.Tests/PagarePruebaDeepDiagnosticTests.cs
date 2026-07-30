@@ -6,6 +6,7 @@ using PdfSharpCore.Pdf.IO;
 
 namespace DocNative.Core.Tests;
 
+[Collection(nameof(DocnetCollection))]
 public class PagarePruebaDeepDiagnosticTests
 {
     private const string DefaultPdfPath =
