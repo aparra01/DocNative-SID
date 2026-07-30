@@ -1,6 +1,8 @@
 using DocNative.Core.Abstractions;
+using DocNative.Core.Configuration;
 using DocNative.Core.Imaging;
 using DocNative.Core.Models;
+using Microsoft.Extensions.Options;
 using OpenCvSharp;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
@@ -10,6 +12,13 @@ namespace DocNative.Core.Pdf;
 
 public sealed class PdfRewriteService : IPdfRewriter
 {
+    private readonly DocNativeOptions _options;
+
+    public PdfRewriteService(IOptions<DocNativeOptions> options)
+    {
+        _options = options.Value;
+    }
+
     public void Rewrite(
         string sourcePdfPath,
         string destinationPdfPath,
@@ -40,7 +49,7 @@ public sealed class PdfRewriteService : IPdfRewriter
                     continue;
                 }
 
-                AddRasterPage(output, pageImages[pageInfo.PageIndex], pageInfo.RotationDegrees, renderDpi);
+                AddRasterPage(output, pageImages[pageInfo.PageIndex], pageInfo, renderDpi);
                 continue;
             }
 
@@ -64,21 +73,27 @@ public sealed class PdfRewriteService : IPdfRewriter
         File.Move(tempPath, destinationPdfPath);
     }
 
-    private static bool ShouldBakeFromImage(PageAnalysisResult pageInfo)
+    private bool ShouldBakeFromImage(PageAnalysisResult pageInfo)
     {
-        return pageInfo.RotationDegrees != 0 || pageInfo.SourceRotation != 0;
+        return pageInfo.RotationDegrees != 0
+            || pageInfo.SourceRotation != 0
+            || Math.Abs(pageInfo.SkewDegrees) >= _options.MinSkewDegrees;
     }
 
-    private static void AddRasterPage(PdfDocument output, Mat sourceImage, int rotationDegrees, int renderDpi)
+    private void AddRasterPage(PdfDocument output, Mat sourceImage, PageAnalysisResult pageInfo, int renderDpi)
     {
-        using var rotated = ImageRotator.Apply(sourceImage, rotationDegrees);
+        using var transformed = ImageRotator.Apply(
+            sourceImage,
+            pageInfo.RotationDegrees,
+            pageInfo.SkewDegrees,
+            _options.MinSkewDegrees);
         using var bgr = new Mat();
-        Cv2.CvtColor(rotated, bgr, ColorConversionCodes.BGRA2BGR);
+        Cv2.CvtColor(transformed, bgr, ColorConversionCodes.BGRA2BGR);
         Cv2.ImEncode(".png", bgr, out var pngBytes);
 
         var dpi = renderDpi > 0 ? renderDpi : 150;
-        var widthPt = rotated.Width * 72.0 / dpi;
-        var heightPt = rotated.Height * 72.0 / dpi;
+        var widthPt = transformed.Width * 72.0 / dpi;
+        var heightPt = transformed.Height * 72.0 / dpi;
 
         var page = output.AddPage();
         page.Width = XUnit.FromPoint(widthPt);

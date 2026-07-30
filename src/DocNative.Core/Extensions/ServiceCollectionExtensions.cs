@@ -14,7 +14,10 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDocNativeCore(this IServiceCollection services)
     {
         services.AddSingleton<IBlankPageDetector, BlankPageDetector>();
-        services.AddSingleton<IRotationCorrector, RotationCorrector>();
+        services.AddSingleton<HeuristicOrientationDetector>();
+        services.AddSingleton<TesseractOsdDetector>();
+        services.AddSingleton<OpenCvSkewDetector>();
+        services.AddSingleton<IRotationCorrector, PageGeometryCorrector>();
         services.AddSingleton<IPdfRenderer, PdfRenderService>();
         services.AddSingleton<IPdfRewriter, PdfRewriteService>();
         services.AddSingleton<IDocumentPipeline, DocumentPipeline>();

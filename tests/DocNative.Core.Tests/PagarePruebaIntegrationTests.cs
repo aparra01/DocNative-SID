@@ -3,6 +3,7 @@ using DocNative.Core.Imaging;
 using DocNative.Core.Pdf;
 using DocNative.Core.Pipeline;
 using DocNative.Core.Paths;
+using DocNative.Core.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PdfSharpCore.Pdf.IO;
@@ -30,13 +31,8 @@ public class PagarePruebaIntegrationTests
 
         try
         {
-            var options = Options.Create(new DocNativeOptions
-            {
-                BlankPageThreshold = 0.02,
-                BlankPageInkRatioThreshold = 0.015,
-                RenderDpi = 150,
-                OutputRoot = tempDir
-            });
+            var options = Options.Create(TestGeometryCorrectorFactory.CreateDefaultOptions());
+            options.Value.OutputRoot = tempDir;
 
             using var renderer = new PdfRenderService(options);
             var pipeline = new DocumentPipeline(
@@ -44,8 +40,8 @@ public class PagarePruebaIntegrationTests
                 new PathLayout(options),
                 renderer,
                 new BlankPageDetector(options),
-                new RotationCorrector(),
-                new PdfRewriteService(),
+                TestGeometryCorrectorFactory.Create(options.Value),
+                TestGeometryCorrectorFactory.CreatePdfRewriter(options.Value),
                 NullLogger<DocumentPipeline>.Instance);
 
             var result = pipeline.Process(pdfPath, outputPath);

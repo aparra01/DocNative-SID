@@ -2,6 +2,7 @@ using DocNative.Core.Configuration;
 using DocNative.Core.Imaging;
 using DocNative.Core.Pdf;
 using DocNative.Core.Pipeline;
+using DocNative.Core.Tests.Helpers;
 using Microsoft.Extensions.Options;
 using OpenCvSharp;
 
@@ -22,15 +23,10 @@ public class PagarePruebaPipelineTests
             throw new FileNotFoundException($"PDF de prueba no encontrado: {pdfPath}");
         }
 
-        var options = Options.Create(new DocNativeOptions
-        {
-            BlankPageThreshold = 0.02,
-            BlankPageInkRatioThreshold = 0.015,
-            RenderDpi = 150
-        });
+        var options = Options.Create(TestGeometryCorrectorFactory.CreateDefaultOptions());
         using var renderer = new PdfRenderService(options);
         var blankDetector = new BlankPageDetector(options);
-        var rotationCorrector = new RotationCorrector();
+        var rotationCorrector = TestGeometryCorrectorFactory.Create(options.Value);
 
         var sourceRotations = ReadSourceRotations(pdfPath);
         var pages = renderer.RenderPages(pdfPath, 150);
@@ -44,7 +40,7 @@ public class PagarePruebaPipelineTests
             using var image = pages[i];
             var metrics = BlankPageDetector.Analyze(image, options.Value);
             var isBlank = blankDetector.IsBlank(image);
-            var pixelRotation = isBlank ? 0 : rotationCorrector.DetectPortraitCorrectionDegrees(image);
+            var pixelRotation = isBlank ? 0 : rotationCorrector.DetectCorrection(image).CoarseRotationDegrees;
             var sourceRotation = sourceRotations[i];
             var contentRotation = DocumentPipeline.ResolveContentRotation(pixelRotation, sourceRotation);
 

@@ -1,22 +1,17 @@
-# DocNative.Sucursales — Windows container (LTSC 2022, servercore).
-# OpenCvSharp requiere servercore (no nanoserver).
-FROM mcr.microsoft.com/dotnet/sdk:8.0-nanoserver-ltsc2022 AS build
-WORKDIR /src
+# DocNative.Sucursales — contenedor Windows (LTSC 2022) con Tesseract OSD + OpenCvSharp.
+FROM mcr.microsoft.com/dotnet/sdk:8.0-windowsservercore-ltsc2022 AS build
 
-COPY DocNative.sln ./
-COPY src/DocNative.Core/DocNative.Core.csproj src/DocNative.Core/
-COPY src/DocNative.Sucursales/DocNative.Sucursales.csproj src/DocNative.Sucursales/
+WORKDIR C:\\src
+COPY . .
 
-RUN dotnet restore DocNative.sln
+RUN dotnet restore src\\DocNative.Sucursales\\DocNative.Sucursales.csproj
+RUN dotnet publish src\\DocNative.Sucursales\\DocNative.Sucursales.csproj -c Release -o C:\\app\\publish /p:UseAppHost=true
 
-COPY src/ src/
-RUN dotnet publish src/DocNative.Sucursales/DocNative.Sucursales.csproj -c Release -o /app/publish
-
-FROM mcr.microsoft.com/dotnet/runtime:8.0-servercore-ltsc2022 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-windowsservercore-ltsc2022
 
 SHELL ["powershell", "-NoProfile", "-Command"]
 
-# VC++ 2015–2022 x64 (OpenCvSharp / Docnet nativos)
+# VC++ 2015–2022 x64 (OpenCvSharp runtime).
 RUN $ErrorActionPreference = 'Stop'; \
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
     $vc = Join-Path $env:TEMP 'vc_redist.x64.exe'; \
@@ -25,11 +20,21 @@ RUN $ErrorActionPreference = 'Stop'; \
     if ($p.ExitCode -notin 0,3010,1638) { throw \"vc_redist exit $($p.ExitCode)\" }; \
     Remove-Item $vc -Force -ErrorAction SilentlyContinue
 
-WORKDIR C:/app
-COPY --from=build /app/publish .
+# VC++ 2013 x64 + Tesseract (incluye osd.traineddata).
+RUN $ErrorActionPreference = 'Stop'; Set-ExecutionPolicy Bypass -Scope Process -Force; \
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+    Invoke-Expression ((New-Object Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); \
+    choco install vcredist2013 tesseract -y --no-progress
 
-ENV DocNative__RawRoot=C:/mnt/PagareOcrRaw
-ENV DocNative__OutputRoot=C:/mnt/PagareOcrEntrada
-ENV DocNative__ErrorRoot=C:/mnt/PagareOcrError
+RUN $ErrorActionPreference = 'Stop'; \
+    $tess = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'; \
+    if (-not (Test-Path $tess)) { throw \"Tesseract no instalado en $tess\" }; \
+    & $tess --version
+
+WORKDIR C:\\app
+
+COPY --from=build C:\\app\\publish .
+
+ENV DocNative__TesseractExecutablePath=C:\\Program Files\\Tesseract-OCR\\tesseract.exe
 
 ENTRYPOINT ["DocNative.Sucursales.exe"]

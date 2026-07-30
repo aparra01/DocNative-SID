@@ -1,18 +1,17 @@
-using DocNative.Core.Abstractions;
 using OpenCvSharp;
 
 namespace DocNative.Core.Imaging;
 
-public sealed class RotationCorrector : IRotationCorrector
+public sealed class HeuristicOrientationDetector
 {
-    public int DetectPortraitCorrectionDegrees(Mat image)
+    public int DetectCoarseRotationDegrees(Mat image)
     {
         if (image.Empty())
         {
             return 0;
         }
 
-        using var gray = ToGray(image);
+        using var gray = ImageGrayHelper.ToGray(image);
 
         if (image.Width > image.Height)
         {
@@ -65,27 +64,11 @@ public sealed class RotationCorrector : IRotationCorrector
         var centerOfMass = (top * TopThirdCenter + middle * MiddleThirdCenter + bottom * BottomThirdCenter) / total;
         var topShare = (double)top / total;
 
-        // Solo rotar cuando casi todo el contenido quedó en la mitad inferior y arriba hay poco encabezado.
         return centerOfMass > 0.52 && topShare < 0.25;
     }
 
     private static int CountInk(Mat binary, Rect region)
     {
         return Cv2.CountNonZero(binary[region]);
-    }
-
-    private static Mat ToGray(Mat image)
-    {
-        var gray = new Mat();
-        if (image.Channels() == 1)
-        {
-            image.CopyTo(gray);
-        }
-        else
-        {
-            Cv2.CvtColor(image, gray, ColorConversionCodes.BGR2GRAY);
-        }
-
-        return gray;
     }
 }

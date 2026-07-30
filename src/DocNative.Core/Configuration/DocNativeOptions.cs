@@ -37,6 +37,18 @@ public sealed class DocNativeOptions
 
     public int RenderDpi { get; set; } = 150;
 
+    public string TesseractExecutablePath { get; set; } = @"C:\Program Files\Tesseract-OCR\tesseract.exe";
+
+    public double OsdMinConfidence { get; set; } = 1.5;
+
+    public bool EnableDeskew { get; set; } = true;
+
+    public double MaxSkewDegrees { get; set; } = 15;
+
+    public double MinSkewDegrees { get; set; } = 0.3;
+
+    public int TesseractTimeoutSeconds { get; set; } = 30;
+
     public int FileStabilityMaxWaitSeconds { get; set; } = 20;
 
     public double FileStabilityPollSeconds { get; set; } = 1.5;

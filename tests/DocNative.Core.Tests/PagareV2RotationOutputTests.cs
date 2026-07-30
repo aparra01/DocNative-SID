@@ -3,6 +3,7 @@ using DocNative.Core.Imaging;
 using DocNative.Core.Pdf;
 using DocNative.Core.Pipeline;
 using DocNative.Core.Paths;
+using DocNative.Core.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PdfSharpCore.Pdf.IO;
@@ -29,15 +30,17 @@ public class PagareV2RotationOutputTests
 
         try
         {
-            var options = Options.Create(new DocNativeOptions { RenderDpi = 150, OutputRoot = tempDir });
+            var options = Options.Create(TestGeometryCorrectorFactory.CreateDefaultOptions());
+            options.Value.OutputRoot = tempDir;
+            options.Value.RenderDpi = 150;
             using var renderer = new PdfRenderService(options);
             var pipeline = new DocumentPipeline(
                 options,
                 new PathLayout(options),
                 renderer,
                 new BlankPageDetector(options),
-                new RotationCorrector(),
-                new PdfRewriteService(),
+                TestGeometryCorrectorFactory.Create(options.Value),
+                TestGeometryCorrectorFactory.CreatePdfRewriter(options.Value),
                 NullLogger<DocumentPipeline>.Instance);
 
             pipeline.Process(SourcePdf, outputPath);

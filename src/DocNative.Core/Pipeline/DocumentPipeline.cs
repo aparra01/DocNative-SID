@@ -59,12 +59,22 @@ public sealed class DocumentPipeline : IDocumentPipeline
                     var image = pageImages[i];
                     var blankMetrics = BlankPageDetector.Analyze(image, _options);
                     var isBlank = blankMetrics.IsBlank;
-                    var pixelRotation = isBlank ? 0 : _rotationCorrector.DetectPortraitCorrectionDegrees(image);
+                    PageGeometryCorrection geometry;
+                    if (isBlank)
+                    {
+                        geometry = new PageGeometryCorrection(0, 0, 0, "blank");
+                    }
+                    else
+                    {
+                        geometry = _rotationCorrector.DetectCorrection(image);
+                    }
+
                     var sourceRotation = i < sourceRotations.Count ? sourceRotations[i] : 0;
-                    var contentRotation = ResolveContentRotation(pixelRotation, sourceRotation);
+                    var contentRotation = ResolveContentRotation(geometry.CoarseRotationDegrees, sourceRotation);
+                    var bake = ShouldBakePage(contentRotation, sourceRotation, geometry.SkewDegrees);
 
                     _logger.LogInformation(
-                        "Pagina {PageNumber}/{PageCount} | mean={Mean:F4} stdDev={StdDev:F4} ink={InkRatio:P2} uniformEmpty={UniformEmpty} | blank={IsBlank} | pixelRot={PixelRotation} pdfRot={SourceRotation} contentRot={ContentRotation} bake={Bake}",
+                        "Pagina {PageNumber}/{PageCount} | mean={Mean:F4} stdDev={StdDev:F4} ink={InkRatio:P2} uniformEmpty={UniformEmpty} | blank={IsBlank} | method={DetectionMethod} osdConf={OsdConfidence:F1} skew={SkewDegrees:F2} | pixelRot={PixelRotation} pdfRot={SourceRotation} contentRot={ContentRotation} bake={Bake}",
                         i + 1,
                         pageImages.Count,
                         blankMetrics.NormalizedMean,
@@ -72,17 +82,23 @@ public sealed class DocumentPipeline : IDocumentPipeline
                         blankMetrics.InkRatio,
                         blankMetrics.IsUniformEmptyRender,
                         isBlank,
-                        pixelRotation,
+                        geometry.DetectionMethod,
+                        geometry.OsdConfidence,
+                        geometry.SkewDegrees,
+                        geometry.CoarseRotationDegrees,
                         sourceRotation,
                         contentRotation,
-                        contentRotation != 0 || sourceRotation != 0);
+                        bake);
 
                     analysis.Add(new PageAnalysisResult
                     {
                         PageIndex = i,
                         IsBlank = isBlank,
                         RotationDegrees = contentRotation,
-                        SourceRotation = sourceRotation
+                        SourceRotation = sourceRotation,
+                        SkewDegrees = geometry.SkewDegrees,
+                        OsdConfidence = geometry.OsdConfidence,
+                        DetectionMethod = geometry.DetectionMethod
                     });
                 }
 
@@ -112,7 +128,7 @@ public sealed class DocumentPipeline : IDocumentPipeline
             }
 
             var removed = analysis.Count(p => p.IsBlank);
-            var rotated = analysis.Count(p => !p.IsBlank && p.RotationDegrees != 0);
+            var rotated = analysis.Count(p => !p.IsBlank && IsPageCorrected(p));
 
             _logger.LogInformation(
                 "PDF procesado {Source} -> {Destination}. Paginas eliminadas: {Removed}, rotadas: {Rotated}",
@@ -157,6 +173,18 @@ public sealed class DocumentPipeline : IDocumentPipeline
         }
 
         return NormalizeRotation(sourceRotation);
+    }
+
+    private bool ShouldBakePage(int contentRotation, int sourceRotation, double skewDegrees)
+    {
+        return contentRotation != 0
+            || sourceRotation != 0
+            || Math.Abs(skewDegrees) >= _options.MinSkewDegrees;
+    }
+
+    private bool IsPageCorrected(PageAnalysisResult page)
+    {
+        return page.RotationDegrees != 0 || Math.Abs(page.SkewDegrees) >= _options.MinSkewDegrees;
     }
 
     private static IReadOnlyList<int> ReadSourcePageRotations(string sourcePdfPath)
