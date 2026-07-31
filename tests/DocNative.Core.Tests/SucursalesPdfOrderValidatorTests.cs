@@ -116,6 +116,7 @@ public class SucursalesPdfOrderValidatorTests
         return new SucursalesPdfOrderValidator(
             options,
             factory,
+            new PagareSplitValidationGate(options, NullLogger<PagareSplitValidationGate>.Instance),
             NullLogger<SucursalesPdfOrderValidator>.Instance);
     }
 

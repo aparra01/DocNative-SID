@@ -17,6 +17,7 @@ public sealed class DocumentProcessorService
     private readonly FileStabilityChecker _stabilityChecker;
     private readonly SucursalResolver _sucursalResolver;
     private readonly SucursalesPdfOrderValidator _orderValidator;
+    private readonly DocumentProcessingGate _processingGate;
     private readonly ILogger<DocumentProcessorService> _logger;
     private readonly HashSet<string> _inProgress = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
@@ -29,6 +30,7 @@ public sealed class DocumentProcessorService
         FileStabilityChecker stabilityChecker,
         SucursalResolver sucursalResolver,
         SucursalesPdfOrderValidator orderValidator,
+        DocumentProcessingGate processingGate,
         ILogger<DocumentProcessorService> logger)
     {
         _options = options.Value;
@@ -38,6 +40,7 @@ public sealed class DocumentProcessorService
         _stabilityChecker = stabilityChecker;
         _sucursalResolver = sucursalResolver;
         _orderValidator = orderValidator;
+        _processingGate = processingGate;
         _logger = logger;
     }
 
@@ -80,6 +83,8 @@ public sealed class DocumentProcessorService
                 return;
             }
         }
+
+        using var processingSlot = await _processingGate.AcquireAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {

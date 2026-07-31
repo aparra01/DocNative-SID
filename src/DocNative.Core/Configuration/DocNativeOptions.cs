@@ -102,4 +102,10 @@ public sealed class DocNativeOptions
 
     /// <summary>Pausa en segundos entre reintentos transitorios de PagareSplit.</summary>
     public int PagareSplitValidationRetryDelaySeconds { get; set; } = 2;
+
+    /// <summary>Máximo de PDFs procesados en paralelo por DocNative (cola FIFO vía semáforo).</summary>
+    public int MaxConcurrentDocuments { get; set; } = 2;
+
+    /// <summary>Máximo de validaciones PagareSplit simultáneas desde DocNative (recomendado: 1).</summary>
+    public int PagareSplitMaxConcurrentValidations { get; set; } = 1;
 }

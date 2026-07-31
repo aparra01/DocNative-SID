@@ -49,9 +49,11 @@ El trabajo interno de DocNative usa `%LOCALAPPDATA%/DocNative/work/<codigo>/` (n
 | `RenderDpi` | `150` | DPI render Docnet |
 | `EnableInterleavedPdfValidation` | `false` | **Solo sucursales:** rechazar PDF con operaciones intercaladas |
 | `PagareSplitBaseUrl` | *(vacío)* | URL de PagareSplit-SID para validación de orden |
-| `PagareSplitValidationTimeoutSeconds` | `120` | Timeout HTTP validación sucursales |
+| `PagareSplitValidationTimeoutSeconds` | `300` | Timeout HTTP validación sucursales |
 | `PagareSplitValidationMaxRetries` | `3` | Intentos máximos (incluye el primero) ante fallos transitorios de PagareSplit |
 | `PagareSplitValidationRetryDelaySeconds` | `2` | Pausa entre reintentos transitorios |
+| `MaxConcurrentDocuments` | `2` | PDFs procesados en paralelo (cola vía semáforo; subir con CPU/RAM suficiente) |
+| `PagareSplitMaxConcurrentValidations` | `1` | Validaciones simultáneas a PagareSplit (recomendado 1 ante alto volumen) |
 | `FileStabilityMaxWaitSeconds` | `20` | Espera archivo estable antes de procesar |
 
 ### Variables Docker (host)

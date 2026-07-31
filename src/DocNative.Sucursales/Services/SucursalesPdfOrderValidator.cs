@@ -19,15 +19,18 @@ public sealed class SucursalesPdfOrderValidator
 
     private readonly DocNativeOptions _options;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly PagareSplitValidationGate _validationGate;
     private readonly ILogger<SucursalesPdfOrderValidator> _logger;
 
     public SucursalesPdfOrderValidator(
         IOptions<DocNativeOptions> options,
         IHttpClientFactory httpClientFactory,
+        PagareSplitValidationGate validationGate,
         ILogger<SucursalesPdfOrderValidator> logger)
     {
         _options = options.Value;
         _httpClientFactory = httpClientFactory;
+        _validationGate = validationGate;
         _logger = logger;
     }
 
@@ -65,6 +68,7 @@ public sealed class SucursalesPdfOrderValidator
         {
             try
             {
+                using var gate = await _validationGate.AcquireAsync(pdfPath, cancellationToken).ConfigureAwait(false);
                 using var content = BuildMultipartContent(pdfPath);
                 using var response = await client.PostAsync(requestUri, content, cancellationToken).ConfigureAwait(false);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);

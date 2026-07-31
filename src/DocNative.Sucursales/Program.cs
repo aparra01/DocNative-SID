@@ -30,6 +30,8 @@ builder.Services.AddHttpClient(
         var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DocNativeOptions>>().Value;
         client.Timeout = TimeSpan.FromSeconds(Math.Max(10, options.PagareSplitValidationTimeoutSeconds));
     });
+builder.Services.AddSingleton<PagareSplitValidationGate>();
+builder.Services.AddSingleton<DocumentProcessingGate>();
 builder.Services.AddSingleton<SucursalesPdfOrderValidator>();
 builder.Services.AddSingleton<FileStabilityChecker>();
 builder.Services.AddSingleton<SucursalResolver>();
@@ -47,7 +49,7 @@ var errorDayDirectory = pathLayout.GetDateErrorDirectory(today);
 var errorCsvPath = pathLayout.GetCsvFilePath(today);
 
 Log.Information(
-    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR_DIA={ErrorDayDirectory}, ERROR_CSV={ErrorCsvPath}, ValidarIntercalado={ValidarIntercalado}, PagareSplit={PagareSplitUrl}",
+    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR_DIA={ErrorDayDirectory}, ERROR_CSV={ErrorCsvPath}, ValidarIntercalado={ValidarIntercalado}, PagareSplit={PagareSplitUrl}, MaxConcurrent={MaxConcurrent}, PagareSplitConcurrent={PagareSplitConcurrent}",
     docNativeOptions.OutputRoot,
     pathLayout.GetWorkRoot(),
     DocNativeOptions.ListoSubfolderName,
@@ -57,6 +59,8 @@ Log.Information(
     docNativeOptions.EnableInterleavedPdfValidation,
     string.IsNullOrWhiteSpace(docNativeOptions.PagareSplitBaseUrl)
         ? "(no configurado)"
-        : docNativeOptions.PagareSplitBaseUrl);
+        : docNativeOptions.PagareSplitBaseUrl,
+    docNativeOptions.MaxConcurrentDocuments,
+    docNativeOptions.PagareSplitMaxConcurrentValidations);
 
 await host.RunAsync();
