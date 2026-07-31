@@ -28,7 +28,20 @@ public sealed class ErrorHandler : IErrorHandler
         Directory.CreateDirectory(destinationDirectory);
 
         var fileName = Path.GetFileName(sourcePdfPath);
-        var destinationPath = Path.Combine(destinationDirectory, fileName);
+        var canonicalDestination = Path.Combine(destinationDirectory, fileName);
+
+        if (!File.Exists(sourcePdfPath) && File.Exists(canonicalDestination))
+        {
+            _logger.LogInformation(
+                "Error ya registrado, omitiendo duplicado. Agencia={Agencia}, Archivo={Archivo}, TipoError={TipoError}, Destino={Destino}",
+                agencia,
+                fileName,
+                tipoError,
+                canonicalDestination);
+            return;
+        }
+
+        var destinationPath = canonicalDestination;
 
         if (File.Exists(destinationPath))
         {

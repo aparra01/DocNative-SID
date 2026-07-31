@@ -195,6 +195,16 @@ public sealed class DocumentProcessorService
             var (orderValid, orderError) = await _orderValidator.ValidateAsync(workingPath, cancellationToken).ConfigureAwait(false);
             if (!orderValid)
             {
+                if (_pathLayout.TryLocateRelocatedPdf(outputFileName, 5, out var relocatedPath))
+                {
+                    _logger.LogInformation(
+                        "PDF mal ordenado ya registrado por otro worker, omitiendo | Agencia={Agencia} | Archivo={Archivo} | Ubicacion={Ubicacion}",
+                        agencia,
+                        outputFileName,
+                        relocatedPath);
+                    return;
+                }
+
                 await _errorHandler.HandleAsync(
                     workingPath,
                     agencia,
