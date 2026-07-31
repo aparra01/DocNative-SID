@@ -96,4 +96,10 @@ public sealed class DocNativeOptions
 
     /// <summary>Timeout en segundos para validación remota con PagareSplit.</summary>
     public int PagareSplitValidationTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>Intentos máximos al validar orden con PagareSplit (incluye el primer intento).</summary>
+    public int PagareSplitValidationMaxRetries { get; set; } = 3;
+
+    /// <summary>Pausa en segundos entre reintentos transitorios de PagareSplit.</summary>
+    public int PagareSplitValidationRetryDelaySeconds { get; set; } = 2;
 }

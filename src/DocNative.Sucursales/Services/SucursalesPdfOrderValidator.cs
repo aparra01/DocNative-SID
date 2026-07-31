@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using DocNative.Core.Configuration;
@@ -52,55 +53,118 @@ public sealed class SucursalesPdfOrderValidator
             return (true, null);
         }
 
-        try
+        var maxRetries = Math.Max(1, _options.PagareSplitValidationMaxRetries);
+        var retryDelay = TimeSpan.FromSeconds(Math.Max(0, _options.PagareSplitValidationRetryDelaySeconds));
+        var client = _httpClientFactory.CreateClient(nameof(SucursalesPdfOrderValidator));
+        var requestUri = $"{_options.PagareSplitBaseUrl.TrimEnd('/')}/validar-orden-sucursales";
+
+        HttpStatusCode? lastStatusCode = null;
+        Exception? lastException = null;
+
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
-            using var content = new MultipartFormDataContent();
-            await using var stream = File.OpenRead(pdfPath);
-            var fileContent = new StreamContent(stream);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
-            content.Add(fileContent, "file", Path.GetFileName(pdfPath));
-            content.Add(new StringContent("160"), "dpi");
-
-            var client = _httpClientFactory.CreateClient(nameof(SucursalesPdfOrderValidator));
-            var baseUrl = _options.PagareSplitBaseUrl.TrimEnd('/');
-            var requestUri = $"{baseUrl}/validar-orden-sucursales";
-
-            using var response = await client.PostAsync(requestUri, content, cancellationToken).ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
+            try
             {
+                using var content = BuildMultipartContent(pdfPath);
+                using var response = await client.PostAsync(requestUri, content, cancellationToken).ConfigureAwait(false);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var parsed = JsonSerializer.Deserialize<PagareSplitValidationResponse>(body, JsonOptions);
+                    if (parsed?.Intercalado == true)
+                    {
+                        var message = string.IsNullOrWhiteSpace(parsed.Mensaje)
+                            ? "PDF mal ordenado"
+                            : parsed.Mensaje;
+                        _logger.LogWarning(
+                            "PDF rechazado por operaciones intercaladas | Archivo={Archivo} | Detalle={Detalle}",
+                            pdfPath,
+                            message);
+                        return (false, message);
+                    }
+
+                    return (true, null);
+                }
+
+                lastStatusCode = response.StatusCode;
+                lastException = null;
                 _logger.LogWarning(
-                    "PagareSplit respondió {StatusCode} al validar orden | Archivo={Archivo} | Body={Body}",
+                    "PagareSplit respondió {StatusCode} al validar orden | Archivo={Archivo} | Intento={Intento}/{MaxIntentos} | Body={Body}",
                     (int)response.StatusCode,
                     pdfPath,
+                    attempt,
+                    maxRetries,
                     body);
-                return (false, "No se pudo validar el orden del PDF (PagareSplit no disponible)");
-            }
 
-            var parsed = JsonSerializer.Deserialize<PagareSplitValidationResponse>(body, JsonOptions);
-            if (parsed?.Intercalado == true)
+                if (!IsTransientStatusCode(response.StatusCode) || attempt >= maxRetries)
+                {
+                    break;
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
             {
-                var message = string.IsNullOrWhiteSpace(parsed.Mensaje)
-                    ? "PDF mal ordenado"
-                    : parsed.Mensaje;
+                lastException = ex;
+                lastStatusCode = null;
                 _logger.LogWarning(
-                    "PDF rechazado por operaciones intercaladas | Archivo={Archivo} | Detalle={Detalle}",
+                    ex,
+                    "No se pudo validar orden con PagareSplit | Archivo={Archivo} | Intento={Intento}/{MaxIntentos}",
                     pdfPath,
-                    message);
-                return (false, message);
+                    attempt,
+                    maxRetries);
+
+                if (attempt >= maxRetries)
+                {
+                    break;
+                }
             }
 
-            return (true, null);
+            if (attempt < maxRetries)
+            {
+                await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+            }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+
+        return (false, BuildFailureMessage(lastStatusCode, lastException));
+    }
+
+    private static MultipartFormDataContent BuildMultipartContent(string pdfPath)
+    {
+        var content = new MultipartFormDataContent();
+        var stream = File.OpenRead(pdfPath);
+        var fileContent = new StreamContent(stream);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        content.Add(fileContent, "file", Path.GetFileName(pdfPath));
+        content.Add(new StringContent("160"), "dpi");
+        return content;
+    }
+
+    private static bool IsTransientStatusCode(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.InternalServerError
+            or HttpStatusCode.BadGateway
+            or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.GatewayTimeout;
+
+    private static string BuildFailureMessage(HttpStatusCode? statusCode, Exception? exception)
+    {
+        if (statusCode == HttpStatusCode.InternalServerError)
         {
-            _logger.LogWarning(
-                ex,
-                "No se pudo validar orden con PagareSplit | Archivo={Archivo}",
-                pdfPath);
-            return (false, "No se pudo validar el orden del PDF (PagareSplit no disponible)");
+            return "PagareSplit error interno (reintentos agotados)";
         }
+
+        if (statusCode is HttpStatusCode.BadGateway
+            or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.GatewayTimeout)
+        {
+            return "PagareSplit no disponible (reintentos agotados)";
+        }
+
+        if (exception is not null)
+        {
+            return "PagareSplit no disponible (reintentos agotados)";
+        }
+
+        return "PagareSplit no disponible (reintentos agotados)";
     }
 
     private sealed class PagareSplitValidationResponse

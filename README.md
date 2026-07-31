@@ -50,6 +50,8 @@ El trabajo interno de DocNative usa `%LOCALAPPDATA%/DocNative/work/<codigo>/` (n
 | `EnableInterleavedPdfValidation` | `false` | **Solo sucursales:** rechazar PDF con operaciones intercaladas |
 | `PagareSplitBaseUrl` | *(vacío)* | URL de PagareSplit-SID para validación de orden |
 | `PagareSplitValidationTimeoutSeconds` | `120` | Timeout HTTP validación sucursales |
+| `PagareSplitValidationMaxRetries` | `3` | Intentos máximos (incluye el primero) ante fallos transitorios de PagareSplit |
+| `PagareSplitValidationRetryDelaySeconds` | `2` | Pausa entre reintentos transitorios |
 | `FileStabilityMaxWaitSeconds` | `20` | Espera archivo estable antes de procesar |
 
 ### Variables Docker (host)
@@ -125,6 +127,23 @@ CSV (append inmediato al registrar cada error):
 ### Flujo sucursales: PDF mal ordenado
 
 Solo en **DocNative.Sucursales** (`EnableInterleavedPdfValidation=true`): antes de entregar a `LISTO/`, consulta **PagareSplit-SID** (`POST /validar-orden-sucursales`) para leer Code39 en todas las páginas. Si las operaciones vienen intercaladas, el PDF va a `SALIDA/ERROR/` con **Tipo Error = `PDF mal ordenado`**. El operador debe re-escanear separando cada pagaré.
+
+Ante fallos transitorios de PagareSplit (500/502/503/504, timeout o red), DocNative reintenta según `PagareSplitValidationMaxRetries` antes de mover el PDF a error. Los tipos de error en CSV distinguen:
+
+- `PDF mal ordenado: ...` — rechazo de negocio (operaciones intercaladas)
+- `PagareSplit error interno (reintentos agotados)` — PagareSplit respondió 500 persistentemente
+- `PagareSplit no disponible (reintentos agotados)` — servicio caído, timeout o 502/503/504
+
+### Reprocesar PDFs por falso positivo de PagareSplit
+
+Script operativo: [`scripts/reprocesar-pagaresplit-error.ps1`](scripts/reprocesar-pagaresplit-error.ps1)
+
+```powershell
+.\scripts\reprocesar-pagaresplit-error.ps1 `
+  -SalidaRoot "C:\SID\COOPROGRESO\PAGAREOCR\SALIDA" `
+  -EntradaRoot "C:\SID\COOPROGRESO\PAGAREOCR\ENTRADA" `
+  -Fecha "20260731"
+```
 
 Variables Docker (servicio `docnative`):
 
