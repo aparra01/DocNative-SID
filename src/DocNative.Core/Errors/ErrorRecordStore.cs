@@ -2,25 +2,39 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using DocNative.Core.Abstractions;
+using DocNative.Core.Configuration;
 using DocNative.Core.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace DocNative.Core.Errors;
 
 public sealed class ErrorRecordStore : IErrorRecordStore
 {
-    private const string CsvHeader = "#,Fecha,Hora,Agencia,Nombre PDF,Tipo Error";
+    private const string LegacyCsvHeader = "#,Fecha,Hora,Agencia,Nombre PDF,Tipo Error";
+    private const string CentralCsvHeader = "#,Fecha,Hora,Agencia,Nombre PDF,Descripción Error";
 
     private readonly ConcurrentDictionary<string, int> _rowCountCache = new();
     private readonly IPathLayout _pathLayout;
+    private readonly DocNativeOptions _options;
     private readonly ILogger<ErrorRecordStore> _logger;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
-    public ErrorRecordStore(IPathLayout pathLayout, ILogger<ErrorRecordStore> logger)
+    public ErrorRecordStore(
+        IPathLayout pathLayout,
+        IOptions<DocNativeOptions> options,
+        ILogger<ErrorRecordStore> logger)
     {
         _pathLayout = pathLayout;
+        _options = options.Value;
         _logger = logger;
     }
+
+    private bool UsesCentralErrorLayout =>
+        _options.UsePagareOcrCentralErrorLayout || _options.EnableInterleavedPdfValidation;
+
+    private string CsvHeader =>
+        UsesCentralErrorLayout ? CentralCsvHeader : LegacyCsvHeader;
 
     public async Task AppendErrorAsync(ErrorRecord record, CancellationToken cancellationToken = default)
     {

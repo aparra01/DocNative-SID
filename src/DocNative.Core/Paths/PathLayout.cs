@@ -1,3 +1,4 @@
+using System.Globalization;
 using DocNative.Core.Abstractions;
 using DocNative.Core.Configuration;
 using Microsoft.Extensions.Options;
@@ -45,9 +46,17 @@ public sealed class PathLayout : IPathLayout
     public string GetDateErrorDirectory(DateOnly date) =>
         Path.Combine(EffectiveErrorRoot, FormatDateFolder(date));
 
-    /// <summary>Ruta del único CSV diario: …/ERROR/DD_MM_YYYY/errores_DD_MM_YYYY.csv.</summary>
-    public string GetCsvFilePath(DateOnly date) =>
-        Path.Combine(GetDateErrorDirectory(date), $"errores_{FormatDateFolder(date)}.csv");
+    /// <summary>Ruta del CSV diario (layout central o legado según configuración).</summary>
+    public string GetCsvFilePath(DateOnly date)
+    {
+        var dateFolder = FormatDateFolder(date);
+        if (UsesCentralErrorLayout)
+        {
+            return Path.Combine(EffectiveErrorRoot, $"{dateFolder}_error.csv");
+        }
+
+        return Path.Combine(EffectiveErrorRoot, dateFolder, $"errores_{dateFolder}.csv");
+    }
 
     public string GetProcesandoPath(string agencia, string fileName) =>
         Path.Combine(GetWorkRoot(), SanitizeAgency(agencia), fileName);
@@ -233,6 +242,9 @@ public sealed class PathLayout : IPathLayout
         return true;
     }
 
+    private bool UsesCentralErrorLayout =>
+        _options.UsePagareOcrCentralErrorLayout || _options.EnableInterleavedPdfValidation;
+
     private string EffectiveErrorRoot
     {
         get
@@ -242,11 +254,24 @@ public sealed class PathLayout : IPathLayout
                 return Normalize(_options.ErrorRoot);
             }
 
+            if (UsesCentralErrorLayout)
+            {
+                return Path.Combine(Normalize(_options.SalidaRoot), DocNativeOptions.CentralErrorDirName);
+            }
+
             return Path.Combine(Normalize(_options.SalidaRoot), "ERROR");
         }
     }
 
-    private static string FormatDateFolder(DateOnly date) => date.ToString("dd_MM_yyyy");
+    private string FormatDateFolder(DateOnly date)
+    {
+        if (UsesCentralErrorLayout)
+        {
+            return date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        }
+
+        return date.ToString("dd_MM_yyyy", CultureInfo.InvariantCulture);
+    }
 
     private static string SanitizeAgency(string agencia)
     {

@@ -24,11 +24,19 @@ public sealed class DocNativeOptions
     [Obsolete("Delivery is now ENTRADA/<codigo>/LISTO/.")]
     public string PreProcesadoRoot { get; set; } = @"C:\mnt\PagareOcrPreProcesado";
 
-    /// <summary>Raíz SALIDA de PyVision; si <see cref="ErrorRoot"/> está vacío, errores en {SalidaRoot}/ERROR.</summary>
+    /// <summary>Raíz SALIDA de PyVision; si <see cref="ErrorRoot"/> está vacío, errores según layout.</summary>
     public string SalidaRoot { get; set; } = @"C:\mnt\PagareOcrSalida";
 
-    /// <summary>Errores centralizados (p. ej. SALIDA/ERROR). Vacío → {SalidaRoot}/ERROR.</summary>
+    /// <summary>Errores centralizados. Vacío → {SalidaRoot}/ERROR o {SalidaRoot}/00 - ERROR según layout.</summary>
     public string ErrorRoot { get; set; } = string.Empty;
+
+    /// <summary>Carpeta de error central PagareOCR sucursales (compatible con PyVision).</summary>
+    public const string CentralErrorDirName = "00 - ERROR";
+
+    /// <summary>
+    /// Flujo sucursales: errores en {SalidaRoot}/00 - ERROR/YYYYMMDD/ y CSV {YYYYMMDD}_error.csv en la raíz.
+    /// </summary>
+    public bool UsePagareOcrCentralErrorLayout { get; set; }
 
     public double BlankPageThreshold { get; set; } = 0.02;
 

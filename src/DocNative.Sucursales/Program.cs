@@ -42,15 +42,18 @@ var docNativeOptions = builder.Configuration.GetSection(DocNativeOptions.Section
 var host = builder.Build();
 
 var pathLayout = host.Services.GetRequiredService<DocNative.Core.Abstractions.IPathLayout>();
+var today = DateOnly.FromDateTime(DateTime.Now);
+var errorDayDirectory = pathLayout.GetDateErrorDirectory(today);
+var errorCsvPath = pathLayout.GetCsvFilePath(today);
+
 Log.Information(
-    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR={ErrorRoot}, ValidarIntercalado={ValidarIntercalado}, PagareSplit={PagareSplitUrl}",
+    "DocNative.Sucursales iniciando. ENTRADA={OutputRoot}, WORK={WorkRoot}, LISTO={ListoSubfolder}, SALIDA={SalidaRoot}, ERROR_DIA={ErrorDayDirectory}, ERROR_CSV={ErrorCsvPath}, ValidarIntercalado={ValidarIntercalado}, PagareSplit={PagareSplitUrl}",
     docNativeOptions.OutputRoot,
     pathLayout.GetWorkRoot(),
     DocNativeOptions.ListoSubfolderName,
     docNativeOptions.SalidaRoot,
-    string.IsNullOrWhiteSpace(docNativeOptions.ErrorRoot)
-        ? Path.Combine(docNativeOptions.SalidaRoot, "ERROR")
-        : docNativeOptions.ErrorRoot,
+    errorDayDirectory,
+    errorCsvPath,
     docNativeOptions.EnableInterleavedPdfValidation,
     string.IsNullOrWhiteSpace(docNativeOptions.PagareSplitBaseUrl)
         ? "(no configurado)"

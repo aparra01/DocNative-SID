@@ -125,7 +125,7 @@ public class ErrorRecordStoreTests
             ErrorRoot = string.Empty
         });
 
-        return new ErrorRecordStore(new PathLayout(options), NullLogger<ErrorRecordStore>.Instance);
+        return new ErrorRecordStore(new PathLayout(options), options, NullLogger<ErrorRecordStore>.Instance);
     }
 
     private static string CreateTempDirectory() =>

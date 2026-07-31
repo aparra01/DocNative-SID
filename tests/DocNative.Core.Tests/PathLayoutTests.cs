@@ -114,6 +114,40 @@ public class PathLayoutTests
     }
 
     [Fact]
+    public void GetDateErrorDirectory_UsesCentralLayout_WhenEnabled()
+    {
+        var layout = new PathLayout(Options.Create(new DocNativeOptions
+        {
+            OutputRoot = @"C:\data\entrada",
+            WorkRoot = @"C:\Users\test\AppData\Local\DocNative\work",
+            SalidaRoot = @"C:\data\salida",
+            ErrorRoot = string.Empty,
+            UsePagareOcrCentralErrorLayout = true
+        }));
+
+        var path = layout.GetDateErrorDirectory(new DateOnly(2026, 7, 30));
+
+        Assert.EndsWith(Path.Combine("salida", "00 - ERROR", "20260730"), path.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GetCsvFilePath_UsesCentralLayout_WhenEnabled()
+    {
+        var layout = new PathLayout(Options.Create(new DocNativeOptions
+        {
+            OutputRoot = @"C:\data\entrada",
+            WorkRoot = @"C:\Users\test\AppData\Local\DocNative\work",
+            SalidaRoot = @"C:\data\salida",
+            ErrorRoot = string.Empty,
+            UsePagareOcrCentralErrorLayout = true
+        }));
+
+        var path = layout.GetCsvFilePath(new DateOnly(2026, 7, 30));
+
+        Assert.EndsWith(Path.Combine("salida", "00 - ERROR", "20260730_error.csv"), path.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void TryLocateRelocatedPdf_FindsPdfInListoFolder()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "docnative-test-" + Guid.NewGuid().ToString("N"));
