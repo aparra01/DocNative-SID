@@ -5,7 +5,7 @@ WORKDIR C:\\src
 COPY . .
 
 RUN dotnet restore src\\DocNative.Sucursales\\DocNative.Sucursales.csproj
-RUN dotnet publish src\\DocNative.Sucursales\\DocNative.Sucursales.csproj -c Release -o C:\\app\\publish /p:UseAppHost=true
+RUN dotnet publish src\\DocNative.Sucursales\\DocNative.Sucursales.csproj -c Release -o C:\\app\\publish -r win-x64 --self-contained false /p:UseAppHost=true
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-windowsservercore-ltsc2022
 
@@ -30,6 +30,9 @@ RUN $ErrorActionPreference = 'Stop'; \
     $tess = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'; \
     if (-not (Test-Path $tess)) { throw \"Tesseract no instalado en $tess\" }; \
     & $tess --version
+
+# OpenCvSharp 4.x requiere Media Foundation (mfplat.dll), ausente en Server Core por defecto.
+COPY docker/media-foundation/*.dll C:\\Windows\\System32\\
 
 WORKDIR C:\\app
 
