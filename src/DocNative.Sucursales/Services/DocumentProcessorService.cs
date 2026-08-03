@@ -90,11 +90,18 @@ public sealed class DocumentProcessorService
         {
             if (File.Exists(listoPath))
             {
+                var workOrphan = File.Exists(workingPath);
+                if (workOrphan)
+                {
+                    TryCleanupSourceFile(workingPath, agencia, fileName, phase: "listo_exists");
+                }
+
                 _logger.LogInformation(
-                    "PDF ya entregado en LISTO, omitiendo | Agencia={Agencia} | Archivo={Archivo} | Destino={Destino}",
+                    "PDF ya entregado en LISTO, omitiendo | Agencia={Agencia} | Archivo={Archivo} | Destino={Destino} | WorkOrphan={WorkOrphan}",
                     agencia,
                     fileName,
-                    listoPath);
+                    listoPath,
+                    workOrphan);
                 return;
             }
 
@@ -254,7 +261,6 @@ public sealed class DocumentProcessorService
             }
 
             File.Move(result.OutputPath, listoPath, overwrite: true);
-            CleanupSourceFile(workingPath);
 
             _logger.LogInformation(
                 "PDF entregado a LISTO | CorrelationId={CorrelationId} | Agencia={Agencia} | Archivo={Archivo} | Eliminadas={Removed} | Rotadas={Rotated} | Destino={Destino}",
@@ -264,6 +270,8 @@ public sealed class DocumentProcessorService
                 result.PagesRemoved,
                 result.PagesRotated,
                 listoPath);
+
+            TryCleanupSourceFile(workingPath, agencia, outputFileName, phase: "post_delivery");
         }
         finally
         {
@@ -282,11 +290,69 @@ public sealed class DocumentProcessorService
         }
     }
 
-    private static void CleanupSourceFile(string workingPath)
+    private void TryCleanupSourceFile(string workingPath, string agencia, string fileName, string phase)
     {
-        if (File.Exists(workingPath))
+        if (!File.Exists(workingPath))
         {
-            File.Delete(workingPath);
+            return;
+        }
+
+        const int maxAttempts = 5;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                File.Delete(workingPath);
+                return;
+            }
+            catch (IOException ex) when (attempt < maxAttempts)
+            {
+                _logger.LogDebug(
+                    ex,
+                    "WORK ocupado, reintento eliminacion | Agencia={Agencia} | Archivo={Archivo} | Fase={Fase} | Intento={Intento}/{MaxIntentos}",
+                    agencia,
+                    fileName,
+                    phase,
+                    attempt,
+                    maxAttempts);
+                Thread.Sleep(150 * attempt);
+            }
+            catch (IOException ex)
+            {
+                TryQuarantineDeliveredWorkFile(workingPath, agencia, fileName, phase, ex);
+                return;
+            }
+        }
+    }
+
+    private void TryQuarantineDeliveredWorkFile(string workingPath, string agencia, string fileName, string phase, Exception deleteError)
+    {
+        var quarantinePath = workingPath + ".delivered";
+        try
+        {
+            if (File.Exists(quarantinePath))
+            {
+                File.Delete(quarantinePath);
+            }
+
+            File.Move(workingPath, quarantinePath, overwrite: true);
+            _logger.LogWarning(
+                deleteError,
+                "WORK renombrado a .delivered tras fallo de eliminacion | Agencia={Agencia} | Archivo={Archivo} | Fase={Fase} | Ruta={Ruta}",
+                agencia,
+                fileName,
+                phase,
+                quarantinePath);
+        }
+        catch (Exception quarantineEx)
+        {
+            _logger.LogWarning(
+                quarantineEx,
+                "No se pudo eliminar ni renombrar WORK tras entrega (LISTO intacto) | Agencia={Agencia} | Archivo={Archivo} | Fase={Fase} | Ruta={Ruta}",
+                agencia,
+                fileName,
+                phase,
+                workingPath);
         }
     }
 }
